@@ -69,7 +69,7 @@
 # Configuration du repository en mode "manager" avec gestion des permissions
 - name: (main) Configuration du repository en mode "manager"
   block:
-    - name: Création du répertoire d'inventaire sur le serveur manager
+    - name: "(main) Création du répertoire d'inventaire sur le serveur manager ({{ cmdb_manager_host }})"
       delegate_to: "{{ cmdb_manager_host }}"
       become: true  # Activer sudo pour cette tâche sur le manager
       file:
@@ -87,7 +87,7 @@
       register: manager_dir_creation
       ignore_errors: true  # Continuer même si cette tâche échoue
       
-    - name: (main) Vérifier l'accès en écriture sur les répertoires du serveur manager
+    - name: "(main) Vérifier l'accès en écriture sur les répertoires du serveur manager ({{ cmdb_manager_host }})"
       delegate_to: "{{ cmdb_manager_host }}"
       become: true
       shell: "touch {{ item }}/test_write_access && rm {{ item }}/test_write_access"
@@ -99,18 +99,18 @@
       changed_when: false
       ignore_errors: true
       
-    - name: (main) Définir l'existence du répertoire manager avec accès en écriture
+    - name: "(main) Définir l'existence du répertoire manager avec accès en écriture ({{ cmdb_manager_host }})"
       set_fact:
         cmdb_inventory_repository_dir_exists: "{{ (manager_dir_creation is success) and (write_test is success) }}"
         cmdb_inventory_repository_dir: "{{ cmdb_repository.directory }}"
         cmdb_inventory_repository_host: "{{ cmdb_manager_host }}"
 
-    - name: (main) Message de diagnostic si problème d'accès
+    - name: "(main) Message de diagnostic si problème d'accès ({{ cmdb_manager_host }})"
       debug:
         msg: "AVERTISSEMENT: Problèmes de permissions sur le répertoire {{ cmdb_repository.directory }}. Utilisation du répertoire alternatif."
       when: not cmdb_inventory_repository_dir_exists | default(true)
 
-    - name: (main) Définir le répertoire d'inventaire alternatif si nécessaire
+    - name: "(main) Définir le répertoire d'inventaire alternatif si nécessaire ({{ cmdb_manager_host }})"
       set_fact:
         cmdb_inventory_repository_dir: "{{ cmdb_repository.fallback_directory }}"
       when: not cmdb_inventory_repository_dir_exists | default(true)
