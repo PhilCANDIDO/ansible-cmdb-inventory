@@ -1,0 +1,10 @@
+# ==== tasks/security/main.yml ====
+---
+- name: Inclusion des tâches de collecte sécurité de base
+  include_tasks: updates.yml
+
+- name: Inclusion des tâches de collecte utilisateurs
+  include_tasks: users.yml
+
+- name: Inclusion des tâches de collecte certificats
+  include_tasks: certificates.yml

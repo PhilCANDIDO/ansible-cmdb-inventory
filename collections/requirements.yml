@@ -1,0 +1,9 @@
+---
+collections:
+- community.general
+
+# Dépendances Python requises
+python:
+  - jmespath>=0.10.0
+  - netaddr>=0.8.0  # Utile pour le filtrage d'adresses IP
+  - packaging>=20.0  # Utile pour la comparaison de versions

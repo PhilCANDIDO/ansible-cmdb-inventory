@@ -1,0 +1,5 @@
+---
+# Common ansible options
+ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=30'
+ansible_user: "deploy"
+ansible_become_user: root

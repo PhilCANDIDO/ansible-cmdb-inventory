@@ -1,0 +1,50 @@
+# roles/cmdb_inventory/tasks/cleanup_temp.yml
+---
+# Tâche dédiée au nettoyage des dossiers temporaires après transfert vers le repository
+
+- name: Vérifier l'existence du dossier temporaire
+  delegate_to: localhost
+  become: false
+  stat:
+    path: "/tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}"
+  register: temp_dir_stat
+
+- name: Afficher un message si aucun dossier temporaire n'est trouvé
+  debug:
+    msg: "Aucun dossier temporaire trouvé pour la date {{ inventory_date | default(ansible_date_time.date) | default('now') }}. Rien à nettoyer."
+  when: not temp_dir_stat.stat.exists | default(false)
+
+- name: Nettoyer le dossier temporaire
+  block:
+    - name: Supprimer le dossier temporaire complet
+      delegate_to: localhost
+      become: false
+      file:
+        path: "/tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}"
+        state: absent
+      register: cleanup_result
+      
+    - name: Afficher un message de confirmation
+      debug:
+        msg: "Dossier temporaire nettoyé avec succès: /tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}"
+      when: cleanup_result is success
+  rescue:
+    - name: Afficher un message d'erreur
+      debug:
+        msg: "Erreur lors du nettoyage du dossier temporaire. Vérifiez les permissions."
+      
+    - name: Journaliser l'erreur
+      delegate_to: localhost
+      become: false
+      lineinfile:
+        path: "/tmp/cmdb_cleanup_errors.log"
+        line: "{{ ansible_date_time.iso8601 | default('now') }} - Erreur lors du nettoyage de /tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}"
+        create: yes
+  when: temp_dir_stat.stat.exists | default(false)
+
+# Purger les anciens dossiers temporaires CMDB (plus de 3 jours)
+- name: Purger les anciens dossiers temporaires
+  delegate_to: localhost
+  become: false
+  shell: "find /tmp -name 'cmdb_temp_*' -type d -mtime +3 -exec rm -rf {} \\; 2>/dev/null || true"
+  changed_when: false

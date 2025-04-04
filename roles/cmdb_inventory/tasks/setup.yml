@@ -1,0 +1,13 @@
+# ==== tasks/setup.yml ====
+---
+- name: Création du répertoire temporaire sur les serveurs cibles
+  file:
+    path: "{{ cmdb_inventory_remote_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Collecte des informations de base
+  set_fact:
+    cmdb_inventory_hostname: "{{ ansible_hostname }}"
+    cmdb_inventory_timestamp: "{{ ansible_date_time.iso8601 }}"
+    cmdb_inventory_id: "{{ ansible_hostname }}_{{ ansible_date_time.epoch }}"

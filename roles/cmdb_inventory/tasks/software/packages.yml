@@ -1,0 +1,65 @@
+# ==== tasks/software/packages.yml ====
+---
+- name: Détecter le gestionnaire de paquets
+  set_fact:
+    pkg_manager: >-
+      {% if ansible_pkg_mgr is defined %}
+      {{ ansible_pkg_mgr }}
+      {% elif ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu' %}
+      apt
+      {% elif ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat' %}
+      {% if ansible_distribution_major_version | int >= 8 %}
+      dnf
+      {% else %}
+      yum
+      {% endif %}
+      {% elif ansible_distribution == 'Fedora' %}
+      dnf
+      {% elif ansible_distribution == 'SUSE' %}
+      zypper
+      {% else %}
+      unknown
+      {% endif %}
+    pkg_mgr_command: >-
+      {% if ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu' %}
+      dpkg-query -W -f='${Package} ${Version}\n'
+      {% elif ansible_distribution == 'CentOS' or ansible_distribution == 'RedHat' or ansible_distribution == 'Fedora' %}
+      rpm -qa --qf '%{name} %{version}-%{release}\n'
+      {% elif ansible_distribution == 'SUSE' %}
+      rpm -qa --qf '%{name} %{version}-%{release}\n'
+      {% else %}
+      echo "Gestionnaire de paquets non pris en charge"
+      {% endif %}
+
+- name: Collecter la liste des paquets installés
+  shell: "{{ pkg_mgr_command }}"
+  register: packages_list
+  changed_when: false
+  failed_when: false
+
+- name: Ajouter les paquets aux informations logicielles
+  set_fact:
+    software_info: "{{ software_info | combine({
+      'packages': {
+        'manager': pkg_manager,
+        'count': packages_list.stdout_lines | length,
+        'detailed': false
+      }
+    }) }}"
+  when: packages_list.rc == 0
+
+- name: Collecter les services en cours d'exécution
+  shell: "{% if ansible_service_mgr == 'systemd' %}systemctl list-units --type=service --state=running --no-legend | awk '{print $1}' | sed 's/\\.service$//'{% else %}service --status-all 2>&1 | grep '\\[ + \\]' | awk '{print $4}'{% endif %}"
+  register: running_services
+  changed_when: false
+  failed_when: false
+
+- name: Ajouter les services aux informations logicielles
+  set_fact:
+    software_info: "{{ software_info | combine({
+      'services': {
+        'manager': ansible_service_mgr | default('unknown'),
+        'running': running_services.stdout_lines | list
+      }
+    }) }}"
+  when: running_services.rc == 0

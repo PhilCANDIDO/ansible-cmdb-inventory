@@ -1,0 +1,86 @@
+# Original path: /srv/ansible/roles/cmdb_inventory/tasks/incremental_inventory.yml
+# ==== tasks/incremental_inventory.yml ====
+---
+# S'assurer que les faits sont collectés avant d'utiliser les variables ansible_*
+- name: Collecter les faits si ce n'est pas déjà fait
+  setup:
+    gather_subset:
+      - 'min'
+  when: ansible_processor_count is not defined
+
+- name: Collecter les empreintes système principales
+  set_fact:
+    system_fingerprint:
+      hostname: "{{ ansible_hostname | default(inventory_hostname) }}"
+      kernel: "{{ ansible_kernel | default('unknown') }}"
+      architecture: "{{ ansible_architecture | default('unknown') }}"
+      distribution: "{{ ansible_distribution | default('unknown') }} {{ ansible_distribution_version | default('unknown') }}"
+      processor_count: "{{ ansible_processor_count | default(0) }}"
+      memory_mb: "{{ ansible_memtotal_mb | default(0) }}"
+      network_interfaces: "{{ ansible_interfaces | default([]) | length }}"
+      disks: "{{ ansible_devices.keys() | default([]) | select('match', '^[shvx]d[a-z]|^nvme|^sd|^vd') | list | length }}"
+      default_ipv4: "{{ ansible_default_ipv4.address | default('none') }}"
+      
+- name: Récupérer l'ancien inventaire pour comparaison
+  slurp:
+    src: "{{ cmdb_inventory_local_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+  register: old_inventory_file
+  delegate_to: localhost
+  become: false
+  failed_when: false
+  when: incremental_inventory | default(false)
+  
+- name: Parser l'ancien inventaire
+  set_fact:
+    old_inventory: "{{ (old_inventory_file.content | b64decode | from_json) if cmdb_output_format == 'json' else 
+                      (old_inventory_file.content | b64decode | from_yaml) }}"
+    old_fingerprint: {}
+  when: incremental_inventory | default(false) and old_inventory_file.content is defined
+
+- name: Extraire l'empreinte de l'ancien inventaire
+  set_fact:
+    old_fingerprint:
+      hostname: "{{ old_inventory.hostname | default('none') }}"
+      kernel: "{{ old_inventory.software.os.kernel.version | default('none') }}"
+      architecture: "{{ old_inventory.hardware.system.architecture | default('none') }}"
+      distribution: "{{ old_inventory.software.os.distribution }} {{ old_inventory.software.os.distribution_version }}"
+      processor_count: "{{ old_inventory.hardware.processor.count | default(0) }}"
+      memory_mb: "{{ old_inventory.hardware.memory.total_mb | default(0) }}"
+      network_interfaces: "{{ old_inventory.network.interfaces | length }}"
+      disks: "{{ old_inventory.hardware.disks | length }}"
+      default_ipv4: "{{ old_inventory.network.default_ipv4.address | default('none') }}"
+  when: incremental_inventory | default(false) and old_inventory is defined
+  
+- name: Déterminer les changements système significatifs
+  set_fact:
+    significant_changes: >-
+      {{ system_fingerprint.kernel != old_fingerprint.kernel or
+         system_fingerprint.memory_mb != old_fingerprint.memory_mb or
+         system_fingerprint.processor_count != old_fingerprint.processor_count or
+         system_fingerprint.disks != old_fingerprint.disks or
+         system_fingerprint.network_interfaces != old_fingerprint.network_interfaces or
+         system_fingerprint.default_ipv4 != old_fingerprint.default_ipv4 }}
+  when: incremental_inventory | default(false) and old_fingerprint is defined
+  
+- name: Définir la stratégie d'inventaire par défaut
+  set_fact:
+    inventory_strategy: "full"
+  when: inventory_strategy is not defined
+
+- name: Définir la stratégie d'inventaire basée sur les changements
+  set_fact:
+    inventory_strategy: "{{ 'full' if (not incremental_inventory|default(false)) or 
+                                       (incremental_inventory|default(false) and significant_changes|default(true)) or
+                                       (lookup('pipe', 'date +%w') == '0') else 'incremental' }}"
+  when: 
+    - incremental_inventory | default(false)
+    - old_fingerprint is defined
+    - significant_changes is defined
+                               
+- name: Journaliser la stratégie d'inventaire
+  debug:
+    msg: "Utilisation de la stratégie d'inventaire '{{ inventory_strategy }}' pour {{ ansible_hostname | default(inventory_hostname) }}"
+  
+- name: Générer un marqueur pour l'inventaire différentiel
+  set_fact:
+    inventory_diff_marker: "{{ inventory_strategy }}"

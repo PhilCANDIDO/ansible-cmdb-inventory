@@ -1,0 +1,227 @@
+# Original path: /srv/ansible/roles/cmdb_inventory/tasks/main.yml
+---
+# tasks file for roles/cmdb_inventory
+
+# S'assurer que les faits sont collectés avant tout traitement
+- name: Collecter les faits Ansible
+  setup:
+    gather_subset: 
+      - 'all'
+  when: ansible_processor_count is not defined
+  ignore_errors: true
+  register: facts_result
+  
+- name: Journaliser un avertissement si la collecte de faits a échoué
+  debug:
+    msg: "AVERTISSEMENT: La collecte de faits a échoué sur {{ inventory_hostname }}. Certaines fonctionnalités peuvent être limitées."
+  when: facts_result is failed
+
+# Déterminer le mode de repository (avec valeur par défaut)
+- name: Déterminer le mode de repository
+  set_fact:
+    cmdb_repository_mode: "{{ cmdb_repository.mode | default('local') }}"
+
+# Déterminer le serveur manager - CRUCIAL: Cette étape doit être exécutée avant d'utiliser cmdb_manager_host
+- name: Déterminer le serveur manager
+  set_fact:
+    cmdb_manager_host: "{{ groups[cmdb_repository.manager_group | default('cmdb_repository')][0] if (cmdb_repository.manager_group | default('cmdb_repository') in groups) and (groups[cmdb_repository.manager_group | default('cmdb_repository')]|length > 0) else 'localhost' }}"
+
+# Configuration du repository en mode "local"
+- name: Configuration du repository en mode "local"
+  block:
+    - name: Création du répertoire d'inventaire local
+      delegate_to: localhost
+      become: false  # Désactiver sudo pour cette tâche
+      file:
+        path: "{{ cmdb_repository.directory }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+        group: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+      run_once: true
+      ignore_errors: true  # Continuer même si cette tâche échoue
+      register: local_dir_creation
+      
+    - name: Définir l'existence du répertoire local
+      set_fact:
+        cmdb_inventory_repository_dir_exists: "{{ local_dir_creation is success }}"
+        cmdb_inventory_repository_dir: "{{ cmdb_repository.directory }}"
+        cmdb_inventory_repository_host: "localhost"
+
+    - name: Création du répertoire temporaire local alternatif si nécessaire
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ cmdb_repository.fallback_directory }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+        group: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+      run_once: true
+      when: not cmdb_inventory_repository_dir_exists | default(true)
+      
+    - name: Définir le répertoire d'inventaire alternatif si nécessaire
+      set_fact:
+        cmdb_inventory_repository_dir: "{{ cmdb_repository.fallback_directory }}"
+      when: not cmdb_inventory_repository_dir_exists | default(true)
+  when: cmdb_repository_mode == "local"
+
+# Configuration du repository en mode "manager" avec gestion des permissions
+- name: Configuration du repository en mode "manager"
+  block:
+    - name: Création du répertoire d'inventaire sur le serveur manager
+      delegate_to: "{{ cmdb_manager_host }}"
+      become: true  # Activer sudo pour cette tâche sur le manager
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user | default(ansible_user_id) | default(lookup('env', 'USER')) }}"
+        group: "{{ ansible_user | default(ansible_user_id) | default(lookup('env', 'USER')) }}"
+      loop:
+        - "{{ cmdb_repository.directory }}"
+        - "{{ cmdb_repository.directory }}/diagnostics"
+        - "{{ cmdb_repository.directory }}/reports"
+        - "{{ cmdb_repository.fallback_directory }}"
+      run_once: true
+      register: manager_dir_creation
+      ignore_errors: true  # Continuer même si cette tâche échoue
+      
+    - name: Vérifier l'accès en écriture sur les répertoires du serveur manager
+      delegate_to: "{{ cmdb_manager_host }}"
+      become: true
+      shell: "touch {{ item }}/test_write_access && rm {{ item }}/test_write_access"
+      loop:
+        - "{{ cmdb_repository.directory }}"
+        - "{{ cmdb_repository.directory }}/diagnostics"
+        - "{{ cmdb_repository.directory }}/reports"
+      register: write_test
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Définir l'existence du répertoire manager avec accès en écriture
+      set_fact:
+        cmdb_inventory_repository_dir_exists: "{{ (manager_dir_creation is success) and (write_test is success) }}"
+        cmdb_inventory_repository_dir: "{{ cmdb_repository.directory }}"
+        cmdb_inventory_repository_host: "{{ cmdb_manager_host }}"
+
+    - name: Message de diagnostic si problème d'accès
+      debug:
+        msg: "AVERTISSEMENT: Problèmes de permissions sur le répertoire {{ cmdb_repository.directory }}. Utilisation du répertoire alternatif."
+      when: not cmdb_inventory_repository_dir_exists | default(true)
+
+    - name: Définir le répertoire d'inventaire alternatif si nécessaire
+      set_fact:
+        cmdb_inventory_repository_dir: "{{ cmdb_repository.fallback_directory }}"
+      when: not cmdb_inventory_repository_dir_exists | default(true)
+  when: cmdb_repository_mode == "manager"
+
+# S'assurer que les variables de repository sont toujours définies
+- name: S'assurer que les variables de repository sont définies
+  set_fact:
+    cmdb_inventory_repository_dir: "{{ cmdb_inventory_repository_dir | default(cmdb_repository.directory | default('~/cmdb_inventory')) }}"
+    cmdb_inventory_repository_host: "{{ cmdb_inventory_repository_host | default('localhost') }}"
+    cmdb_inventory_repository_dir_exists: "{{ cmdb_inventory_repository_dir_exists | default(false) }}"
+
+# Création du répertoire de diagnostics sur le repository avec les bonnes permissions
+- name: Création du répertoire de diagnostics sur le repository
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: "{{ cmdb_inventory_repository_host != 'localhost' }}"
+  file:
+    path: "{{ cmdb_inventory_repository_dir }}/diagnostics"
+    state: directory
+    mode: '0755'
+    # Ajouter l'utilisateur et le groupe pour assurer les bonnes permissions
+    owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    group: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+  run_once: true
+  ignore_errors: true
+
+# S'assurer que le répertoire principal a les bonnes permissions
+- name: S'assurer que le répertoire principal a les bonnes permissions
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: "{{ cmdb_inventory_repository_host != 'localhost' }}"
+  file:
+    path: "{{ cmdb_inventory_repository_dir }}"
+    state: directory
+    mode: '0755'
+    # Ajouter l'utilisateur et le groupe pour assurer les bonnes permissions
+    owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    group: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+  run_once: true
+  ignore_errors: true
+
+# Création du répertoire temporaire sur les serveurs cibles
+- name: Création du répertoire temporaire sur les serveurs cibles
+  file:
+    path: "{{ cmdb_inventory_remote_dir }}"
+    state: directory
+    mode: '0755'
+  register: remote_dir_creation
+  
+- name: Inclusion des tâches de configuration initiale
+  include_tasks: setup.yml
+  when: remote_dir_creation is success
+
+# Nouvelles tâches d'autodiagnostic et d'inventaire incrémental
+- name: Inclusion des tâches d'autodiagnostic
+  include_tasks: self_diagnostic.yml
+  when: 
+    - remote_dir_creation is success
+    - cmdb_collect.self_diagnostic | default(true) | bool
+    
+- name: Inclusion des tâches pour déterminer le mode d'inventaire (complet ou incrémental)
+  include_tasks: incremental_inventory.yml
+  when: 
+    - remote_dir_creation is success
+    - cmdb_collect.self_diagnostic | default(true) | bool
+    
+# Inclusion conditionnelle des tâches de collecte selon la stratégie d'inventaire
+- name: Inclusion des collectes selon la configuration
+  include_tasks: "{{ item.task }}"
+  when:
+    - remote_dir_creation is success
+    - item.enabled | bool
+    - (inventory_strategy | default('full')) == 'full' or item.always | default(false)
+  loop:
+    - { task: 'hardware/main.yml', enabled: "{{ cmdb_collect.hardware }}", always: true }
+    - { task: 'software/main.yml', enabled: "{{ cmdb_collect.software }}", always: false }
+    - { task: 'network/main.yml', enabled: "{{ cmdb_collect.network }}", always: true }
+    - { task: 'security/main.yml', enabled: "{{ cmdb_collect.security }}", always: false }
+    - { task: 'organizational/main.yml', enabled: "{{ cmdb_collect.organizational }}", always: false }
+
+- name: Générer le rapport CMDB final
+  template:
+    src: cmdb_inventory_report.j2
+    dest: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+    mode: '0644'
+  when: remote_dir_creation is success
+  
+# Étape 1: Récupérer les rapports CMDB vers un dossier temporaire sur le contrôleur
+- name: Récupérer les rapports CMDB dans un dossier temporaire du contrôleur
+  fetch:
+    src: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+    dest: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+    flat: yes
+  ignore_errors: true
+  when: remote_dir_creation is success
+
+# Récupérer les diagnostics aussi si activés
+- name: Récupérer les diagnostics dans un dossier temporaire du contrôleur
+  fetch:
+    src: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+    dest: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/diagnostics/{{ ansible_hostname | default(inventory_hostname) }}_diagnostic.yml"
+    flat: yes
+  ignore_errors: true
+  when: 
+    - remote_dir_creation is success
+    - cmdb_collect.self_diagnostic | default(true) | bool
+
+# Nettoyer le répertoire temporaire sur les serveurs cibles
+- name: Nettoyer le répertoire temporaire
+  file:
+    path: "{{ cmdb_inventory_remote_dir }}"
+    state: absent
+  when: 
+    - remote_dir_creation is success
+    - cmdb_inventory_cleanup | default(true) | bool

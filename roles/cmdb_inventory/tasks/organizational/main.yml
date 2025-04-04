@@ -1,0 +1,69 @@
+# ==== tasks/organizational/main.yml ====
+---
+- name: Collecter les informations organisationnelles depuis le serveur (s'il y en a)
+  block:
+    - name: Vérifier l'existence de fichiers de métadonnées organisationnelles
+      stat:
+        path: "{{ item }}"
+      register: org_files
+      loop:
+        - /etc/org_metadata.json
+        - /etc/server_purpose
+        - /etc/server_owner
+        - /etc/server_environment
+
+    - name: Créer une liste des fichiers existants
+      set_fact:
+        existing_org_files: "{{ org_files.results | selectattr('stat.exists', 'equalto', true) | map(attribute='item') | list }}"
+
+    - name: Lire le contenu des fichiers de métadonnées
+      slurp:
+        src: "{{ item }}"
+      register: org_file_contents
+      loop: "{{ existing_org_files }}"
+      when: existing_org_files | length > 0
+
+    - name: Analyser les fichiers de métadonnées
+      set_fact:
+        organizational_info_from_files: {}
+
+    - name: Analyser les fichiers JSON
+      set_fact:
+        organizational_info_from_files: "{{ organizational_info_from_files | combine(item.content | b64decode | from_json) }}"
+      when: item.item | regex_search('\\.json)
+      loop: "{{ org_file_contents.results | default([]) }}"
+      failed_when: false
+
+    - name: Analyser les fichiers texte simples
+      set_fact:
+        organizational_info_from_files: "{{ organizational_info_from_files | combine({
+          item.item | basename: item.content | b64decode | trim
+        }) }}"
+      when: not item.item | regex_search('\\.json)
+      loop: "{{ org_file_contents.results | default([]) }}"
+      failed_when: false
+  rescue:
+    - name: Marquer les informations organisationnelles des fichiers comme non disponibles
+      set_fact:
+        organizational_info_from_files: {}
+
+- name: Collecter les informations organisationnelles depuis Ansible
+  set_fact:
+    organizational_info:
+      role: "{{ server_role | default('Non spécifié') }}"
+      environment: "{{ server_environment | default('Non spécifié') }}"
+      criticality: "{{ server_criticality | default('Non spécifié') }}"
+      applications: "{{ server_applications | default([]) }}"
+      business_owner: "{{ server_business_owner | default('Non spécifié') }}"
+      technical_owner: "{{ server_technical_owner | default('Non spécifié') }}"
+      sla: "{{ server_sla | default('Non spécifié') }}"
+      commissioned_date: "{{ server_commissioned_date | default('Non spécifié') }}"
+      end_of_life_date: "{{ server_eol_date | default('Non spécifié') }}"
+      datacenter: "{{ server_datacenter | default('Non spécifié') }}"
+      rack: "{{ server_rack | default('Non spécifié') }}"
+      position: "{{ server_position | default('Non spécifié') }}"
+
+- name: Combiner les informations organisationnelles des fichiers et d'Ansible
+  set_fact:
+    organizational_info: "{{ organizational_info | combine(organizational_info_from_files) }}"
+  when: organizational_info_from_files | length > 0

@@ -1,0 +1,69 @@
+# Ansible Runtime Files
+*.retry
+ansible-vaults/
+*.vault
+.vault_pass
+
+# Inventory files (souvent contiennent des informations sensibles)
+/inventory.ini
+/inventory/*/*.ini
+hosts.yml
+/inventory/*/*.yml
+# Mais garder les exemples d'inventaire
+!/examples/inventory.ini
+!/examples/inventory/*.ini
+!/examples/hosts.yml
+
+# Fichiers de variables sensibles
+group_vars/*/vault.yml
+host_vars/*/vault.yml
+*_vault.yml
+**/secrets.yml
+
+# Fichiers générés par le rôle
+/opt/cmdb/inventory/
+/tmp/cmdb_inventory/
+*.log
+*_cmdb_inventory.json
+*_cmdb_inventory.yaml
+*_cmdb_inventory.yml
+*_diagnostic.yml
+
+# Fichiers de certificats, clés et autres données sensibles
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+
+# Fichiers d'environnements virtuels Python
+venv/
+.venv/
+env/
+.env/
+
+# Dossiers et fichiers de développement
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.tox/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers README spécifiques au développement
+README_FOR_AI.md
+file_mapping.txt
+
+# Fichiers temporaires
+/tmp/

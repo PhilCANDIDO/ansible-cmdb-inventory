@@ -1,0 +1,55 @@
+{# Template Jinja2 pour le rapport d'inventaire CMDB #}
+{% if cmdb_output_format == 'json' %}
+{
+  "inventory_id": "{{ cmdb_inventory_id }}",
+  "hostname": "{{ cmdb_inventory_hostname }}",
+  "collection_date": "{{ cmdb_inventory_timestamp }}",
+  
+  "hardware": {{ hardware_info | to_json }},
+  
+  "software": {{ software_info | to_json }},
+  
+  "network": {{ network_info | to_json }},
+  
+  "security": {{ security_info | to_json }},
+  
+  "organizational": {{ organizational_info | to_json }}
+}
+{% elif cmdb_output_format == 'yaml' %}
+---
+inventory_id: {{ cmdb_inventory_id }}
+hostname: {{ cmdb_inventory_hostname }}
+collection_date: {{ cmdb_inventory_timestamp }}
+
+hardware:
+{{ hardware_info | to_yaml(indent=2) }}
+
+software:
+{{ software_info | to_yaml(indent=2) }}
+
+network:
+{{ network_info | to_yaml(indent=2) }}
+
+security:
+{{ security_info | to_yaml(indent=2) }}
+
+organizational:
+{{ organizational_info | to_yaml(indent=2) }}
+{% else %}
+# Format non pris en charge, utilisation du format JSON par défaut
+{
+  "inventory_id": "{{ cmdb_inventory_id }}",
+  "hostname": "{{ cmdb_inventory_hostname }}",
+  "collection_date": "{{ cmdb_inventory_timestamp }}",
+  
+  "hardware": {{ hardware_info | to_json }},
+  
+  "software": {{ software_info | to_json }},
+  
+  "network": {{ network_info | to_json }},
+  
+  "security": {{ security_info | to_json }},
+  
+  "organizational": {{ organizational_info | to_json }}
+}
+{% endif %}

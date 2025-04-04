@@ -1,0 +1,226 @@
+# Playbook pour collecter les informations CMDB avec repository dédié
+# Usage:
+#   - En ligne de commande : ansible-playbook -i inventory/inventory_with_repository.ini cmdb_inventory_with_repository.yml --forks=50
+#   - Dans AWX/Tower : Utiliser ce playbook avec l'inventaire associé
+
+---
+# Cette première partie configure le serveur repository qui stockera les données CMDB
+- name: Configuration du serveur repository CMDB
+  hosts: cmdb_repository
+  gather_facts: false
+  become: true
+  
+  vars:
+    repository_base_dir: "/opt/cmdb/inventory"
+    repository_owner: "{{ lookup('env', 'USER') }}"  # Par défaut, l'utilisateur actuel
+    repository_group: "{{ lookup('env', 'USER') }}"  # Par défaut, le groupe de l'utilisateur actuel
+  
+  tasks:
+    - name: Vérifier la connectivité SSH
+      wait_for_connection:
+        timeout: 30
+      register: connection_status
+      ignore_errors: true
+      
+    - name: Collecter les faits basiques pour le repository
+      setup:
+        gather_subset:
+          - '!all'
+          - 'min'
+      when: connection_status is success
+      register: facts_result
+      ignore_errors: true
+      
+    - name: Déterminer l'utilisateur Ansible actif
+      set_fact:
+        repository_owner: "{{ ansible_user_id }}"
+        repository_group: "{{ ansible_user_id }}"
+      when: connection_status is success and facts_result is success
+      
+    - name: Créer les répertoires du repository avec permissions correctes
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+        owner: "{{ repository_owner }}"
+        group: "{{ repository_group }}"
+      with_items:
+        - "{{ repository_base_dir }}"
+        - "{{ repository_base_dir }}/diagnostics"
+        - "{{ repository_base_dir }}/reports"
+        - "/tmp/cmdb_inventory_repository"
+      when: connection_status is success
+      
+    - name: Vérifier l'accès en écriture (test pratique)
+      shell: "touch {{ item }}/test_write_access && rm {{ item }}/test_write_access"
+      with_items:
+        - "{{ repository_base_dir }}"
+        - "{{ repository_base_dir }}/diagnostics"
+        - "{{ repository_base_dir }}/reports"
+      register: write_test
+      changed_when: false
+      failed_when: false
+      when: connection_status is success
+      
+    - name: Afficher un avertissement si des problèmes de permission persistent
+      debug:
+        msg: "AVERTISSEMENT: Le répertoire {{ item.item }} n'a pas les permissions d'écriture nécessaires pour l'utilisateur {{ repository_owner }}"
+      when: 
+        - item.rc is defined
+        - item.rc != 0
+      loop: "{{ write_test.results | default([]) }}"
+      
+    - name: Créer des fichiers de logs pour le suivi
+      file:
+        path: "{{ repository_base_dir }}/{{ item }}"
+        state: touch
+        mode: '0644'
+        owner: "{{ repository_owner }}"
+        group: "{{ repository_group }}"
+      with_items:
+        - "inaccessible_hosts.log"
+        - "inventaire_success.log"
+        - "failed_fetches.log"
+      when: connection_status is success
+
+# Cette deuxième partie exécute l'inventaire sur tous les serveurs sauf le repository
+- name: Collecter les informations pour la CMDB
+  hosts: all:!cmdb_repository
+  gather_facts: false
+  # Augmente le timeout pour gérer les serveurs lents
+  timeout: 60
+  
+  pre_tasks:
+    - name: Vérifier la connectivité SSH
+      wait_for_connection:
+        timeout: 30
+      register: connection_status
+      ignore_errors: true
+      
+    - name: Collecter les faits uniquement pour les hôtes accessibles
+      setup:
+        gather_subset:
+          - '!all'
+          - 'min'
+      when: connection_status is success
+      register: facts_result
+      ignore_errors: true
+      
+    - name: Marquer les hôtes inaccessibles comme ignorés
+      set_fact:
+        host_status: "inaccessible"
+      when: 
+        - connection_status is failed or facts_result is failed
+        
+    - name: Enregistrer les hôtes inaccessibles
+      lineinfile:
+        path: "{{ repository_base_dir }}/inaccessible_hosts.log"
+        line: "{{ inventory_hostname }} - {{ ansible_date_time.iso8601 if ansible_date_time is defined else 'unknown_date' }}"
+        create: yes
+      delegate_to: "{{ groups['cmdb_repository'][0] if (groups['cmdb_repository'] is defined) and (groups['cmdb_repository']|length > 0) else 'localhost' }}"
+      when: host_status is defined and host_status == "inaccessible"
+      ignore_errors: true
+      
+  roles:
+    - role: cmdb_inventory
+      vars:
+        # Utiliser le mode "manager" pour le repository
+        cmdb_repository:
+          mode: "manager"
+          manager_group: "cmdb_repository"
+          directory: "{{ repository_base_dir }}"
+          fallback_directory: "/tmp/cmdb_inventory_repository"
+        # Définir le répertoire de sortie des rapports
+        cmdb_output_format: "json"
+        # Assurer le nettoyage des fichiers temporaires
+        cmdb_inventory_cleanup: true
+        # Activer l'inventaire incrémental pour optimiser les performances
+        cmdb_performance:
+          incremental_enabled: true
+          full_inventory_days: [0]  # Inventaire complet le dimanche
+          async_tasks: true
+          async_timeout: 300
+      when: host_status is not defined
+
+  post_tasks:
+    - name: Rapporter le statut de l'inventaire
+      lineinfile:
+        path: "{{ repository_base_dir }}/inventaire_success.log"
+        line: "{{ inventory_hostname }} - {{ ansible_date_time.iso8601 if ansible_date_time is defined else now() }}"
+        create: yes
+      delegate_to: "{{ groups['cmdb_repository'][0] if (groups['cmdb_repository'] is defined) and (groups['cmdb_repository']|length > 0) else 'localhost' }}"
+      when: host_status is not defined
+      ignore_errors: true
+
+# Cette troisième partie génère des statistiques et des rapports consolidés
+- name: Générer des statistiques et rapports consolidés
+  hosts: cmdb_repository
+  gather_facts: false
+  become: true
+  
+  tasks:
+    - name: Vérifier le nombre de serveurs avec inventaire réussi
+      shell: "wc -l < {{ repository_base_dir }}/inventaire_success.log || echo 0"
+      register: success_count
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Vérifier le nombre de serveurs inaccessibles
+      shell: "wc -l < {{ repository_base_dir }}/inaccessible_hosts.log || echo 0"
+      register: failed_count
+      changed_when: false
+      ignore_errors: true
+      
+    - name: Calculer le pourcentage de réussite
+      set_fact:
+        success_pct: >-
+          {{ ((success_count.stdout|int * 100.0) / ((success_count.stdout|int + failed_count.stdout|int)|default(1))) | float }}
+      ignore_errors: true
+      
+    - name: Générer le rapport de synthèse
+      copy:
+        dest: "{{ repository_base_dir }}/rapport_synthese.txt"
+        content: |
+          Rapport de synthèse de l'inventaire CMDB
+          =======================================
+          Date: {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')) }}
+          
+          Nombre de serveurs inventoriés avec succès: {{ success_count.stdout|int }}
+          Nombre de serveurs inaccessibles: {{ failed_count.stdout|int }}
+          Taux de réussite: {{ '%.2f'|format(success_pct|float) }}%
+          
+          Serveurs par distribution:
+          {% set distributions = {} %}
+          {% for file in lookup('fileglob', repository_base_dir'/reports/*_cmdb_inventory.json', wantlist=True) %}
+          {% set json_content = lookup('file', file) | from_json %}
+          {% set distro = json_content.software.os.distribution | default('Unknown') %}
+          {% set distro_version = json_content.software.os.distribution_version | default('Unknown') %}
+          {% set key = distro + ' ' + distro_version %}
+          {% if key in distributions %}
+          {% set _ = distributions.update({key: distributions[key] + 1}) %}
+          {% else %}
+          {% set _ = distributions.update({key: 1}) %}
+          {% endif %}
+          {% endfor %}
+          {% for distro, count in distributions.items() %}
+          - {{ distro }}: {{ count }}
+          {% endfor %}
+        mode: '0644'
+      ignore_errors: true
+      
+    - name: Corriger les permissions du rapport de synthèse
+      file:
+        path: "{{ repository_base_dir }}/rapport_synthese.txt"
+        owner: "{{ ansible_user_id }}"
+        group: "{{ ansible_user_id }}"
+        mode: '0644'
+      ignore_errors: true
+      
+    - name: Afficher le résultat
+      debug:
+        msg: 
+          - "Inventaire CMDB terminé"
+          - "Serveurs inventoriés avec succès: {{ success_count.stdout|int }}"
+          - "Serveurs inaccessibles: {{ failed_count.stdout|int }}"
+          - "Taux de réussite: {{ '%.2f'|format(success_pct|float) }}%"
+          - "Rapport complet disponible dans {{ repository_base_dir }}/rapport_synthese.txt"

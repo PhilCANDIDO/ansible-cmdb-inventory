@@ -1,0 +1,112 @@
+# roles/cmdb_inventory/tasks/copy_reports.yml
+---
+# Tâche dédiée au transfert des rapports du dossier temporaire vers le repository CMDB
+
+- name: Vérifier l'existence du dossier temporaire
+  delegate_to: localhost
+  become: false
+  stat:
+    path: "/tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}"
+  register: temp_dir_stat
+
+- name: Afficher un message si aucun dossier temporaire n'est trouvé
+  debug:
+    msg: "Aucun dossier temporaire trouvé pour la date {{ inventory_date | default(ansible_date_time.date) | default('now') }}. Aucun rapport à transférer."
+  when: not temp_dir_stat.stat.exists | default(false)
+
+- name: Vérifier la connectivité SSH avec le repository
+  wait_for_connection:
+    timeout: 30
+  register: connection_status
+  ignore_errors: true
+
+- name: Préparer les répertoires sur le serveur repository
+  block:
+    - name: Créer le répertoire pour les rapports CMDB
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      with_items:
+        - "{{ cmdb_repository.directory }}"
+        - "{{ cmdb_repository.directory }}/reports"
+        - "{{ cmdb_repository.directory }}/diagnostics"
+      register: dir_creation
+  rescue:
+    - name: Afficher un message d'erreur si la création de répertoire échoue
+      debug:
+        msg: "Erreur lors de la création des répertoires sur le serveur repository. Vérifiez les permissions."
+  when: connection_status is success
+
+- name: Copier les rapports CMDB vers le repository
+  block:
+    - name: Trouver tous les rapports CMDB dans le dossier temporaire
+      delegate_to: localhost
+      become: false
+      find:
+        paths: "/tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}"
+        patterns: "*_cmdb_inventory.*"
+        file_type: file
+      register: cmdb_reports
+      
+    - name: Copier chaque rapport vers le repository
+      copy:
+        src: "{{ item.path }}"
+        dest: "{{ cmdb_repository.directory }}/reports/{{ item.path | basename }}"
+        mode: '0644'
+      with_items: "{{ cmdb_reports.files }}"
+      register: copy_results
+      ignore_errors: true
+  rescue:
+    - name: Journaliser les erreurs de copie des rapports
+      delegate_to: localhost
+      become: false
+      lineinfile:
+        path: "/tmp/cmdb_copy_errors.log"
+        line: "{{ ansible_date_time.iso8601 | default('now') }} - Erreur lors de la copie des rapports vers {{ inventory_hostname }}"
+        create: yes
+  when: 
+    - connection_status is success
+    - temp_dir_stat.stat.exists | default(false)
+    
+- name: Copier les diagnostics vers le repository
+  block:
+    - name: Trouver tous les fichiers de diagnostic dans le dossier temporaire
+      delegate_to: localhost
+      become: false
+      find:
+        paths: "/tmp/cmdb_temp_{{ inventory_date | default(ansible_date_time.date) | default('now') | replace('-', '') }}/diagnostics"
+        patterns: "*_diagnostic.yml"
+        file_type: file
+      register: diagnostic_files
+      failed_when: false
+      
+    - name: Copier chaque diagnostic vers le repository
+      copy:
+        src: "{{ item.path }}"
+        dest: "{{ cmdb_repository.directory }}/diagnostics/{{ item.path | basename }}"
+        mode: '0644'
+      with_items: "{{ diagnostic_files.files | default([]) }}"
+      register: diag_copy_results
+      ignore_errors: true
+      when: diagnostic_files.matched is defined and diagnostic_files.matched > 0
+  rescue:
+    - name: Journaliser les erreurs de copie des diagnostics
+      delegate_to: localhost
+      become: false
+      lineinfile:
+        path: "/tmp/cmdb_diag_copy_errors.log"
+        line: "{{ ansible_date_time.iso8601 | default('now') }} - Erreur lors de la copie des diagnostics vers {{ inventory_hostname }}"
+        create: yes
+  when: 
+    - connection_status is success
+    - temp_dir_stat.stat.exists | default(false)
+
+- name: Générer un résumé du transfert
+  debug:
+    msg: 
+      - "Transfert des rapports terminé"
+      - "Rapports copiés avec succès: {{ copy_results.results | selectattr('failed', 'equalto', false) | list | length if copy_results.results is defined else 0 }}"
+      - "Rapports avec erreurs: {{ copy_results.results | selectattr('failed', 'equalto', true) | list | length if copy_results.results is defined else 0 }}"
+      - "Diagnostics copiés: {{ diag_copy_results.results | selectattr('failed', 'equalto', false) | list | length if diag_copy_results.results is defined else 0 }}"
+  when: temp_dir_stat.stat.exists | default(false)

@@ -1,0 +1,67 @@
+# Modified path: /srv/ansible/roles/cmdb_inventory/defaults/main.yml
+---
+# defaults file for roles/cmdb_inventory
+
+# Configuration du repository de collecte
+cmdb_repository:
+  # Mode de repository (local, manager)
+  # - local: stockage sur la machine exécutant le playbook (mode historique, fonctionne en CLI)
+  # - manager: utilise un serveur dédié comme repository central
+  mode: "manager"
+  
+  # Groupe de l'inventaire contenant le serveur manager (n'utiliser qu'en mode "manager")
+  # Par défaut, utilise le premier serveur du groupe "cmdb_repository" s'il existe
+  # Sinon utilise "localhost"
+  manager_group: "cmdb_repository"
+  
+  # Répertoire où seront stockés les rapports
+  # - En mode "local": sur la machine exécutant le playbook
+  # - En mode "manager": sur le serveur manager
+  directory: "~/cmdb_inventory"
+  
+  # Répertoire de secours si le répertoire principal n'est pas accessible
+  fallback_directory: "/tmp/cmdb_inventory_repository"
+
+# Répertoire temporaire sur les serveurs cibles lors de la collecte
+cmdb_inventory_remote_dir: "/tmp/cmdb_inventory"
+
+# Format de sortie souhaité
+cmdb_output_format: "json"  # Options: json, yaml, csv
+
+# Nettoyage des fichiers temporaires après exécution
+cmdb_inventory_cleanup: true
+
+# Informations à collecter (peut être personnalisé pour cibler des éléments spécifiques)
+cmdb_collect:
+  hardware: true
+  software: true
+  network: true
+  security: true
+  organizational: true
+  self_diagnostic: true  # Nouvel élément pour les autodiagnostics
+
+# Paramètres de performance pour grands parcs
+cmdb_performance:
+  # Utiliser l'inventaire incrémental pour optimiser les performances
+  incremental_enabled: true
+  # Jours où forcer un inventaire complet (0=dimanche, 1=lundi, etc.)
+  full_inventory_days: [0]  # Par défaut chaque dimanche
+  # Intervalle minimal entre deux inventaires complets (en jours)
+  min_days_between_full: 7
+  # Nombre maximum de jours entre deux inventaires complets
+  max_days_between_full: 30
+  # Utiliser des opérations asynchrones pour les tâches longues
+  async_tasks: true
+  # Timeout pour les opérations asynchrones (en secondes)
+  async_timeout: 300
+
+# Paramètres de la base de données CMDB (si intégration directe souhaitée)
+cmdb_database:
+  enabled: false
+  type: "mongodb"  # mongodb, mysql, postgresql
+  host: "localhost"
+  port: 27017
+  name: "cmdb"
+  user: "cmdb_user"
+  password: "secure_password"
+  collection: "servers"

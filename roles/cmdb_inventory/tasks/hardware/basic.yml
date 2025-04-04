@@ -1,0 +1,66 @@
+# ==== tasks/hardware/basic.yml ====
+---
+- name: Collecter les informations matérielles de base
+  set_fact:
+    hardware_info:
+      system:
+        architecture: "{{ ansible_architecture }}"
+        machine_id: "{{ ansible_machine_id | default('N/A') }}"
+        virtualization_role: "{{ ansible_virtualization_role | default('N/A') }}"
+        virtualization_type: "{{ ansible_virtualization_type | default('N/A') }}"
+      processor:
+        count: "{{ ansible_processor_count }}"
+        cores: "{{ ansible_processor_cores }}"
+        threads_per_core: "{{ ansible_processor_threads_per_core | default(1) }}"
+        vcpus: "{{ ansible_processor_vcpus | default(ansible_processor_count) }}"
+        model: "{{ ansible_processor[1] | default('Unknown') }}"
+      memory:
+        total_mb: "{{ ansible_memtotal_mb }}"
+        swap_mb: "{{ ansible_swaptotal_mb }}"
+
+- name: Collecter les informations sur le modèle et le fabricant (DMI)
+  block:
+    - name: Vérifier si dmidecode est installé
+      command: which dmidecode
+      register: dmidecode_check
+      failed_when: false
+      changed_when: false
+
+    - name: Collecter les informations DMI si disponible
+      block:
+        - name: Obtenir le fabricant du système
+          command: dmidecode -s system-manufacturer
+          register: system_manufacturer
+          changed_when: false
+
+        - name: Obtenir le modèle du système
+          command: dmidecode -s system-product-name
+          register: system_product
+          changed_when: false
+
+        - name: Obtenir le numéro de série
+          command: dmidecode -s system-serial-number
+          register: system_serial
+          changed_when: false
+
+        - name: Ajouter les informations DMI aux facts
+          set_fact:
+            hardware_info: "{{ hardware_info | combine({
+              'system': hardware_info.system | combine({
+                'manufacturer': system_manufacturer.stdout | default('Unknown'),
+                'model': system_product.stdout | default('Unknown'),
+                'serial': system_serial.stdout | default('Unknown')
+              })
+            }) }}"
+      when: dmidecode_check.rc == 0
+      become: true
+  rescue:
+    - name: Définir des valeurs par défaut si DMI n'est pas disponible
+      set_fact:
+        hardware_info: "{{ hardware_info | combine({
+          'system': hardware_info.system | combine({
+            'manufacturer': 'Non disponible (dmidecode requis)',
+            'model': 'Non disponible (dmidecode requis)',
+            'serial': 'Non disponible (dmidecode requis)'
+          })
+        }) }}"

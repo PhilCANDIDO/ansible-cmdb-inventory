@@ -1,0 +1,94 @@
+# Original path: /srv/ansible/roles/cmdb_inventory/tasks/hardware/disks.yml
+# ==== tasks/hardware/disks.yml ====
+---
+# Collecter les informations sur les disques (avec json_query)
+- name: Collecter les informations sur les disques (avec json_query)
+  set_fact:
+    hardware_info: "{{ hardware_info | combine({
+      'disks': ansible_devices | dict2items | 
+               map('json_query', '{name: key, size: value.size, sectors: value.sectors, sectorsize: value.sectorsize, model: value.model, vendor: value.vendor, removable: value.removable, rotational: value.rotational, scheduler_mode: value.scheduler_mode, partitions: value.partitions}') | 
+               list | select('regex', '^(?!loop|ram|sr).*') | list
+    }) }}"
+  when: 
+    - ansible_devices is defined
+    - use_jmespath | default(false)
+
+# Alternative sans json_query pour les disques
+- name: Initialiser liste de disques (sans json_query)
+  set_fact:
+    hardware_disks: []
+  when: 
+    - ansible_devices is defined
+    - not use_jmespath | default(false)
+
+- name: Transformer les informations de disques (sans json_query)
+  set_fact:
+    hardware_disks: "{{ hardware_disks + [{ 
+      'name': item.key, 
+      'size': item.value.size | default('unknown'),
+      'sectors': item.value.sectors | default('unknown'),
+      'sectorsize': item.value.sectorsize | default('unknown'),
+      'model': item.value.model | default('unknown'),
+      'vendor': item.value.vendor | default('unknown'),
+      'removable': item.value.removable | default(false),
+      'rotational': item.value.rotational | default(true),
+      'scheduler_mode': item.value.scheduler_mode | default('unknown'),
+      'partitions': item.value.partitions | default({})
+    }] }}"
+  when: 
+    - ansible_devices is defined
+    - not use_jmespath | default(false)
+    - item.key is not match("^loop") 
+    - item.key is not match("^ram")
+    - item.key is not match("^sr")
+  loop: "{{ ansible_devices | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Ajouter les disques aux informations matérielles (sans json_query)
+  set_fact:
+    hardware_info: "{{ hardware_info | combine({
+      'disks': hardware_disks
+    }) }}"
+  when: 
+    - ansible_devices is defined
+    - not use_jmespath | default(false)
+
+- name: Définir des disques vides si aucune information n'est disponible
+  set_fact:
+    hardware_info: "{{ hardware_info | combine({
+      'disks': []
+    }) }}"
+  when: ansible_devices is not defined
+
+# Approche corrigée pour la collecte des interfaces réseau
+- name: Initialiser liste d'interfaces réseau
+  set_fact:
+    network_interfaces_list: []
+  when: ansible_interfaces is defined
+
+- name: Collecter les informations sur chaque interface réseau
+  set_fact:
+    network_interfaces_list: "{{ network_interfaces_list + [interface_info] }}"
+  vars:
+    interface_info: "{{ ansible_facts['ansible_' + item] | default({}) }}"
+  loop: "{{ ansible_interfaces | default([]) }}"
+  when:
+    - ansible_interfaces is defined
+    - ('ansible_' + item) in ansible_facts
+  loop_control:
+    label: "{{ item }}"
+
+- name: Ajouter les interfaces réseau aux informations matérielles
+  set_fact:
+    hardware_info: "{{ hardware_info | combine({
+      'network_interfaces': network_interfaces_list
+    }) }}"
+  when: ansible_interfaces is defined
+
+- name: Définir des interfaces réseau vides si aucune information n'est disponible
+  set_fact:
+    hardware_info: "{{ hardware_info | combine({
+      'network_interfaces': []
+    }) }}"
+  when: ansible_interfaces is not defined

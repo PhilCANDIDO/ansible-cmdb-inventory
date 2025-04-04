@@ -1,0 +1,16 @@
+# ==== tasks/software/os.yml ====
+---
+- name: Collecter les informations logicielles de base
+  set_fact:
+    software_info:
+      os:
+        family: "{{ ansible_os_family }}"
+        distribution: "{{ ansible_distribution }}"
+        distribution_version: "{{ ansible_distribution_version }}"
+        distribution_release: "{{ ansible_distribution_release | default('N/A') }}"
+      kernel:
+        name: "{{ ansible_kernel }}"
+        version: "{{ ansible_kernel_version | default(ansible_kernel) }}"
+      python:
+        version: "{{ ansible_python_version }}"
+        path: "{{ ansible_python.executable }}"

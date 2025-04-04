@@ -1,0 +1,40 @@
+# ==== tasks/security/users.yml ====
+---
+- name: Collecter les informations sur les comptes utilisateurs
+  block:
+    - name: Compter les utilisateurs avec shell valide
+      shell: "grep -v '/sbin/nologin\\|/bin/false' /etc/passwd | wc -l"
+      register: users_with_shell
+      changed_when: false
+      failed_when: false
+
+    - name: Compter les utilisateurs avec UID 0
+      shell: "grep ':0:' /etc/passwd | wc -l"
+      register: users_with_uid0
+      changed_when: false
+      failed_when: false
+
+    - name: Compter les utilisateurs avec accès sudo
+      shell: "grep -l '^sudo\\|^wheel' /etc/group | xargs grep -o '^[^:]*' | sort -u | wc -l"
+      register: users_with_sudo
+      changed_when: false
+      failed_when: false
+
+    - name: Ajouter les informations sur les utilisateurs
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'users': {
+            'with_shell': users_with_shell.stdout | int,
+            'with_uid0': users_with_uid0.stdout | int,
+            'with_sudo': users_with_sudo.stdout | int
+          }
+        }) }}"
+  rescue:
+    - name: Définir les informations utilisateurs comme non disponibles
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'users': {
+            'available': false,
+            'note': 'Informations utilisateurs non disponibles'
+          }
+        }) }}"

@@ -1,0 +1,58 @@
+# Playbook simple pour collecter les informations CMDB
+# Usage: ansible-playbook -i inventory.ini cmdb_inventory_simple.yml --forks=50
+---
+- name: Collecter les informations pour la CMDB
+  hosts: all
+  # Disable gather facts
+  gather_facts: false
+  # increase server timeout
+  timeout: 60
+  
+  pre_tasks:
+    - name: Vérifier la connectivité SSH
+      wait_for_connection:
+        timeout: 30
+      register: connection_status
+      ignore_errors: true
+      
+    - name: Collecter les faits uniquement pour les hôtes accessibles
+      setup:
+        gather_subset:
+          - '!all'
+          - 'min'
+      when: connection_status is success
+      register: facts_result
+      ignore_errors: true
+      
+    - name: Marquer les hôtes inaccessibles comme ignorés
+      set_fact:
+        host_status: "inaccessible"
+      when: 
+        - connection_status is failed or facts_result is failed
+        
+    - name: Enregistrer les hôtes inaccessibles
+      lineinfile:
+        path: "{{ playbook_dir }}/inaccessible_hosts.log"
+        line: "{{ inventory_hostname }} - {{ ansible_date_time.iso8601 if ansible_date_time is defined else 'unknown_date' }}"
+        create: yes
+      delegate_to: localhost
+      when: host_status is defined and host_status == "inaccessible"
+      
+  roles:
+    - role: cmdb_inventory
+      vars:
+        # Utiliser le mode "local" par défaut (stockage sur la machine qui exécute le playbook)
+        cmdb_repository:
+          mode: "local"
+          directory: "{{ playbook_dir }}/cmdb_inventory_output"
+          fallback_directory: "/tmp/cmdb_inventory_output"
+      when: host_status is not defined
+
+  post_tasks:
+    - name: Rapporter le statut de l'inventaire
+      lineinfile:
+        path: "{{ playbook_dir }}/inventaire_success.log"
+        line: "{{ inventory_hostname }} - {{ ansible_date_time.iso8601 }}"
+        create: yes
+      delegate_to: localhost
+      when: host_status is not defined

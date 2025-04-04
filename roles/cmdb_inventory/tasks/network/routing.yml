@@ -1,0 +1,14 @@
+# ==== tasks/network/routing.yml ====
+---
+- name: Collecter les routes réseau
+  shell: "ip route"
+  register: ip_routes
+  changed_when: false
+  failed_when: false
+
+- name: Ajouter les routes aux informations réseau
+  set_fact:
+    network_info: "{{ network_info | combine({
+      'routes': ip_routes.stdout_lines | default([])
+    }) }}"
+  when: ip_routes.rc == 0

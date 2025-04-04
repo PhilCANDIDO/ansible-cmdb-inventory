@@ -1,0 +1,73 @@
+# ==== tasks/network/interfaces.yml ====
+---
+- name: Collecter les informations réseau de base
+  set_fact:
+    network_info:
+      hostname: "{{ ansible_hostname }}"
+      fqdn: "{{ ansible_fqdn }}"
+      domain: "{{ ansible_domain | default('N/A') }}"
+      default_ipv4: "{{ ansible_default_ipv4 | default({}) }}"
+      default_ipv6: "{{ ansible_default_ipv6 | default({}) }}"
+
+- name: Collecter les informations détaillées sur les interfaces
+  set_fact:
+    network_interfaces: []
+
+- name: Ajouter chaque interface active aux informations
+  set_fact:
+    network_interfaces: "{{ network_interfaces + [
+      {
+        'name': item,
+        'mac': hostvars[inventory_hostname]['ansible_' + item].macaddress | default('N/A'),
+        'ipv4': hostvars[inventory_hostname]['ansible_' + item].ipv4 | default({}),
+        'ipv6': hostvars[inventory_hostname]['ansible_' + item].ipv6 | default([]),
+        'active': hostvars[inventory_hostname]['ansible_' + item].active | default(false),
+        'mtu': hostvars[inventory_hostname]['ansible_' + item].mtu | default('N/A'),
+        'speed': hostvars[inventory_hostname]['ansible_' + item].speed | default('N/A'),
+        'type': hostvars[inventory_hostname]['ansible_' + item].type | default('N/A')
+      }
+    ] }}"
+  when: 
+    - item != 'lo'
+    - hostvars[inventory_hostname]['ansible_' + item] is defined
+  loop: "{{ ansible_interfaces }}"
+
+- name: Ajouter les interfaces aux informations réseau
+  set_fact:
+    network_info: "{{ network_info | combine({
+      'interfaces': network_interfaces
+    }) }}"
+
+- name: Collecter la configuration DNS
+  block:
+    - name: Lire le fichier resolv.conf
+      slurp:
+        src: /etc/resolv.conf
+      register: resolv_conf
+      failed_when: false
+
+    - name: Analyser les nameservers
+      set_fact:
+        dns_nameservers: "{{ resolv_conf['content'] | b64decode | regex_findall('nameserver\\s+([^\\s]+)') }}"
+        dns_search: "{{ resolv_conf['content'] | b64decode | regex_findall('search\\s+([^\\n]+)') }}"
+      when: resolv_conf.content is defined
+
+    - name: Ajouter la configuration DNS aux informations réseau
+      set_fact:
+        network_info: "{{ network_info | combine({
+          'dns': {
+            'nameservers': dns_nameservers | default([]),
+            'search': dns_search | default([])
+          }
+        }) }}"
+      when: resolv_conf.content is defined
+  rescue:
+    - name: Définir les informations DNS comme non disponibles
+      set_fact:
+        network_info: "{{ network_info | combine({
+          'dns': {
+            'nameservers': [],
+            'search': [],
+            'note': 'Informations DNS non disponibles'
+          }
+        }) }}"

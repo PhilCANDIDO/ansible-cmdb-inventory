@@ -1,0 +1,116 @@
+# Exemple d'inventaire avec configuration de repository CMDB
+# Inventaire pour un grand parc de serveurs avec serveur manager dédié pour le stockage des données
+
+#
+# GROUPE REPOSITORY - Serveur(s) dédié(s) pour le stockage des rapports CMDB
+#
+[cmdb_repository]
+cmdb-manager.example.com ansible_host=192.168.1.100
+
+#
+# Groupes fonctionnels
+#
+[web_servers]
+web-prod-[01:10].example.com
+web-test-[01:03].example.com
+
+[database_servers]
+db-prod-[01:05].example.com
+db-replica-[01:03].example.com
+
+[application_servers]
+app-prod-[01:12].example.com
+app-test-[01:04].example.com
+
+[backup_servers]
+backup-[01:03].example.com
+
+#
+# Groupes environnementaux
+#
+[production]
+web-prod-[01:10].example.com
+db-prod-[01:05].example.com
+db-replica-[01:03].example.com
+app-prod-[01:12].example.com
+backup-[01:03].example.com
+
+[test]
+web-test-[01:03].example.com
+app-test-[01:04].example.com
+
+#
+# Groupes d'infrastructure
+#
+[datacenter_paris]
+web-prod-[01:05].example.com
+db-prod-[01:03].example.com
+app-prod-[01:06].example.com
+backup-01.example.com
+
+[datacenter_lyon]
+web-prod-[06:10].example.com
+db-prod-[04:05].example.com
+db-replica-[01:03].example.com
+app-prod-[07:12].example.com
+backup-[02:03].example.com
+web-test-[01:03].example.com
+app-test-[01:04].example.com
+
+#
+# Variables par hôte (pour la CMDB - données organisationnelles)
+#
+[web_servers:vars]
+server_role="Serveur Web"
+server_criticality="Élevée"
+server_technical_owner="Équipe Infrastructure Web"
+server_applications=["Apache", "Nginx", "HAProxy"]
+
+[database_servers:vars]
+server_role="Serveur de Base de Données"
+server_criticality="Critique"
+server_technical_owner="Équipe DBA"
+server_applications=["MySQL", "PostgreSQL"]
+server_sla="99.99%"
+
+[application_servers:vars]
+server_role="Serveur d'Applications"
+server_criticality="Élevée"
+server_technical_owner="Équipe DevOps"
+server_applications=["Tomcat", "JBoss", "Node.js"]
+
+[backup_servers:vars]
+server_role="Serveur de Sauvegarde"
+server_criticality="Moyenne"
+server_technical_owner="Équipe Infrastructure"
+server_applications=["Bacula", "BackupPC"]
+
+[production:vars]
+server_environment="Production"
+server_business_owner="Direction des Opérations"
+
+[test:vars]
+server_environment="Test"
+server_business_owner="Direction Technique"
+
+[datacenter_paris:vars]
+server_datacenter="Paris-P1"
+
+[datacenter_lyon:vars]
+server_datacenter="Lyon-L1"
+
+#
+# Variables spécifiques pour CMDB repository
+#
+[cmdb_repository:vars]
+# Assurez-vous que ce serveur a suffisamment d'espace disque
+# pour stocker les données d'inventaire de tous les serveurs
+ansible_user=ansible
+server_role="CMDB Repository"
+server_criticality="Élevée"
+
+#
+# Variables globales
+#
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3

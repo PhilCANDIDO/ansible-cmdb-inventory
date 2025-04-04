@@ -1,0 +1,9 @@
+---
+- name: Inclusion des tâches de collecte réseau de base
+  include_tasks: interfaces.yml
+
+- name: Inclusion des tâches de collecte de routage
+  include_tasks: routing.yml
+
+- name: Inclusion des tâches de collecte firewall
+  include_tasks: firewall.yml

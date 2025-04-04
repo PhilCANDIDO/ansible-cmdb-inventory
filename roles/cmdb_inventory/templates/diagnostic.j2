@@ -1,0 +1,44 @@
+# Diagnostic généré automatiquement
+# Serveur: {{ diagnostic_data.hostname }}
+# Date: {{ diagnostic_data.timestamp }}
+---
+hostname: {{ diagnostic_data.hostname }}
+timestamp: {{ diagnostic_data.timestamp }}
+
+# Informations système
+system:
+  distribution: {{ diagnostic_data.system.distribution }}
+  kernel: {{ diagnostic_data.system.kernel }}
+  architecture: {{ diagnostic_data.system.architecture }}
+  virtualization: {{ diagnostic_data.system.virtualization }}
+
+# Informations d'accessibilité
+accessibility:
+  ssh_accessible: {{ diagnostic_data.accessibility.ssh_accessible }}
+  facts_available: {{ diagnostic_data.accessibility.facts_available }}
+  sudo_access: {{ diagnostic_data.accessibility.sudo_access }}
+
+# Informations requises
+requirements:
+  python_version: {{ diagnostic_data.requirements.python_version }}
+  dmidecode_installed: {{ diagnostic_data.requirements.dmidecode_installed }}
+  jmespath_available: {{ diagnostic_data.requirements.jmespath_available }}
+  ip_command_available: {{ diagnostic_data.requirements.ip_command_available }}
+
+# Informations d'exécution
+runtime:
+  inventory_strategy: {{ diagnostic_data.runtime.inventory_strategy }}
+  repository_mode: {{ diagnostic_data.runtime.repository_mode }}
+  repository_host: {{ diagnostic_data.runtime.repository_host }}
+  disk_space_sufficient: {{ diagnostic_data.runtime.disk_space_sufficient }}
+
+# Résumé des capacités
+capabilities_summary: >-
+  {% set capabilities = [] %}
+  {% if diagnostic_data.accessibility.facts_available %}{% set capabilities = capabilities + ['facts'] %}{% endif %}
+  {% if diagnostic_data.accessibility.sudo_access %}{% set capabilities = capabilities + ['sudo'] %}{% endif %}
+  {% if diagnostic_data.requirements.dmidecode_installed %}{% set capabilities = capabilities + ['hardware'] %}{% endif %}
+  {% if diagnostic_data.requirements.jmespath_available %}{% set capabilities = capabilities + ['advanced_filtering'] %}{% endif %}
+  {% if diagnostic_data.requirements.ip_command_available %}{% set capabilities = capabilities + ['network'] %}{% endif %}
+  {% if diagnostic_data.runtime.disk_space_sufficient %}{% set capabilities = capabilities + ['disk_space'] %}{% endif %}
+  {{ capabilities | join(', ') }}

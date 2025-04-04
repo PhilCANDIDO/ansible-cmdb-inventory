@@ -1,0 +1,46 @@
+# ==== tasks/security/updates.yml ====
+---
+- name: Collecter les informations de sécurité de base
+  set_fact:
+    security_info:
+      selinux: "{{ ansible_selinux | default({'status': 'disabled'}) }}"
+      apparmor: "{{ ansible_apparmor | default({'status': 'unknown'}) }}"
+
+- name: Collecter les informations sur l'état des mises à jour
+  block:
+    - name: Vérifier les mises à jour disponibles (Debian/Ubuntu)
+      shell: apt list --upgradable | grep -v "Listing..." | wc -l
+      register: apt_updates
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family == 'Debian'
+
+    - name: Vérifier les mises à jour disponibles (RHEL/CentOS 7+)
+      shell: "{{ 'dnf check-update --quiet | grep -v \"^$\" | wc -l' if ansible_distribution_major_version | int >= 8 else 'yum check-update --quiet | grep -v \"^$\" | wc -l' }}"
+      register: rhel_updates
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family == 'RedHat'
+
+    - name: Vérifier les mises à jour disponibles (SUSE)
+      shell: zypper list-updates | grep '| update ' | wc -l
+      register: suse_updates
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family == 'Suse'
+
+    - name: Ajouter les informations de mises à jour
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'updates_available': 
+            apt_updates.stdout | int if ansible_os_family == 'Debian' and apt_updates.rc == 0 else
+            rhel_updates.stdout | int if ansible_os_family == 'RedHat' and rhel_updates.rc == 0 else
+            suse_updates.stdout | int if ansible_os_family == 'Suse' and suse_updates.rc == 0 else
+            'unknown'
+        }) }}"
+  rescue:
+    - name: Définir les informations de mises à jour comme non disponibles
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'updates_available': 'unknown'
+        }) }}"

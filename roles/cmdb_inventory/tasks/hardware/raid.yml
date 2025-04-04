@@ -1,0 +1,24 @@
+---
+- name: Collecter les informations RAID (MegaRAID) si disponible
+  block:
+    - name: Vérifier si MegaCli est installé
+      command: which megacli
+      register: megacli_check
+      failed_when: false
+      changed_when: false
+
+    - name: Obtenir des informations RAID avec MegaCli
+      command: megacli -LDInfo -Lall -aAll
+      register: raid_info
+      changed_when: false
+      when: megacli_check.rc == 0
+      become: true
+
+    - name: Ajouter les informations RAID aux facts
+      set_fact:
+        hardware_info: "{{ hardware_info | combine({'raid': {'type': 'MegaRAID', 'info': raid_info.stdout_lines}}) }}"
+      when: megacli_check.rc == 0
+  rescue:
+    - name: Définir RAID comme non détecté
+      set_fact:
+        hardware_info: "{{ hardware_info | combine({'raid': {'detected': false}}) }}"

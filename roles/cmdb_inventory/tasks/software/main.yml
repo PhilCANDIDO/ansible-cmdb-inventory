@@ -1,0 +1,10 @@
+# ==== tasks/software/main.yml ====
+---
+- name: Inclusion des tâches de collecte logicielle de base
+  include_tasks: os.yml
+
+- name: Inclusion des tâches de collecte des paquets
+  include_tasks: packages.yml
+
+- name: Inclusion des tâches de collecte des bases de données
+  include_tasks: databases.yml

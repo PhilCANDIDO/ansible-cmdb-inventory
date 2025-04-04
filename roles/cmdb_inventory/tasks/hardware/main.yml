@@ -1,0 +1,10 @@
+# ==== tasks/hardware/main.yml ====
+---
+- name: Inclusion des tâches de collecte matérielle de base
+  include_tasks: basic.yml
+
+- name: Inclusion des tâches de collecte sur les disques
+  include_tasks: disks.yml
+
+- name: Inclusion des tâches de collecte RAID
+  include_tasks: raid.yml

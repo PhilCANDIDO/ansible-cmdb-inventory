@@ -1,0 +1,67 @@
+# ==== tasks/software/databases.yml ====
+---
+- name: Détecter les bases de données installées
+  block:
+    - name: Vérifier MySQL/MariaDB
+      command: which mysqld
+      register: mysql_check
+      failed_when: false
+      changed_when: false
+
+    - name: Vérifier PostgreSQL
+      command: which postgres
+      register: postgres_check
+      failed_when: false
+      changed_when: false
+
+    - name: Vérifier MongoDB
+      command: which mongod
+      register: mongodb_check
+      failed_when: false
+      changed_when: false
+
+    - name: Vérifier Oracle Database
+      command: which oracle
+      register: oracle_check
+      failed_when: false
+      changed_when: false
+
+    - name: Collecter les versions des bases de données
+      set_fact:
+        db_info: []
+
+    - name: Obtenir la version MySQL/MariaDB
+      shell: mysqld --version | head -n1
+      register: mysql_version
+      when: mysql_check.rc == 0
+      failed_when: false
+      changed_when: false
+
+    - name: Ajouter MySQL/MariaDB aux DB détectées
+      set_fact:
+        db_info: "{{ db_info + [{'type': 'mysql', 'version': mysql_version.stdout}] }}"
+      when: mysql_check.rc == 0 and mysql_version.rc == 0
+
+    - name: Obtenir la version PostgreSQL
+      shell: postgres --version | head -n1
+      register: postgres_version
+      when: postgres_check.rc == 0
+      failed_when: false
+      changed_when: false
+
+    - name: Ajouter PostgreSQL aux DB détectées
+      set_fact:
+        db_info: "{{ db_info + [{'type': 'postgresql', 'version': postgres_version.stdout}] }}"
+      when: postgres_check.rc == 0 and postgres_version.rc == 0
+
+    - name: Ajouter les bases de données aux informations logicielles
+      set_fact:
+        software_info: "{{ software_info | combine({
+          'databases': db_info
+        }) }}"
+  rescue:
+    - name: Définir les bases de données comme non détectées
+      set_fact:
+        software_info: "{{ software_info | combine({
+          'databases': []
+        }) }}"

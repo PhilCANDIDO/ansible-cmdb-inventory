@@ -1,0 +1,13 @@
+# collections/requirements.yml
+---
+collections:
+  - name: ansible.utils
+    version: '>=2.5.0'
+  - name: community.general
+    version: '>=6.0.0'
+
+# Dépendances Python
+python:
+  - jmespath>=0.10.0
+  - netaddr>=0.8.0  # Utile pour le filtrage d'adresses IP
+  - packaging>=20.0  # Utile pour la comparaison de versions

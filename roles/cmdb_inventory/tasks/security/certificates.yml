@@ -1,0 +1,101 @@
+# ==== tasks/security/certificates.yml ====
+---
+- name: Collecter les informations sur les certificats SSL/TLS
+  block:
+    - name: Trouver les certificats dans des emplacements communs
+      find:
+        paths:
+          - /etc/ssl/certs
+          - /etc/pki/tls/certs
+          - /etc/nginx/ssl
+          - /etc/apache2/ssl
+        patterns: "*.crt,*.pem"
+        recurse: yes
+      register: cert_files
+      failed_when: false
+
+    - name: Analyser les certificats trouvés
+      shell: "openssl x509 -noout -subject -issuer -dates -in {{ item.path }}"
+      register: cert_details
+      with_items: "{{ cert_files.files }}"
+      when: cert_files.matched > 0
+      failed_when: false
+      changed_when: false
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Ajouter les informations sur les certificats
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'certificates': {
+            'count': cert_files.matched | default(0),
+            'details': cert_details.results | default([])
+          }
+        }) }}"
+      when: cert_files.matched is defined
+  rescue:
+    - name: Définir les informations de certificats comme non disponibles
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'certificates': {
+            'available': false,
+            'note': 'Informations certificats non disponibles'
+          }
+        }) }}"
+
+- name: Collecter les informations sur les solutions de sauvegarde
+  block:
+    - name: Vérifier les agents de sauvegarde communs
+      set_fact:
+        backup_solutions: []
+
+    - name: Vérifier BackupPC
+      command: which backuppc
+      register: backuppc_check
+      failed_when: false
+      changed_when: false
+
+    - name: Ajouter BackupPC si détecté
+      set_fact:
+        backup_solutions: "{{ backup_solutions + ['BackupPC'] }}"
+      when: backuppc_check.rc == 0
+
+    - name: Vérifier Bacula
+      command: which bacula-fd
+      register: bacula_check
+      failed_when: false
+      changed_when: false
+
+    - name: Ajouter Bacula si détecté
+      set_fact:
+        backup_solutions: "{{ backup_solutions + ['Bacula'] }}"
+      when: bacula_check.rc == 0
+
+    - name: Vérifier Amanda
+      command: which amandad
+      register: amanda_check
+      failed_when: false
+      changed_when: false
+
+    - name: Ajouter Amanda si détecté
+      set_fact:
+        backup_solutions: "{{ backup_solutions + ['Amanda'] }}"
+      when: amanda_check.rc == 0
+
+    - name: Ajouter les informations sur les solutions de sauvegarde
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'backup': {
+            'solutions': backup_solutions,
+            'detected': backup_solutions | length > 0
+          }
+        }) }}"
+  rescue:
+    - name: Définir les informations de sauvegarde comme non disponibles
+      set_fact:
+        security_info: "{{ security_info | combine({
+          'backup': {
+            'available': false,
+            'note': 'Informations de sauvegarde non disponibles'
+          }
+        }) }}"
