@@ -21,10 +21,18 @@
   set_fact:
     cmdb_repository_mode: "{{ cmdb_repository.mode | default('local') }}"
 
+- name: (main) Afficher le mode de repository
+  debug:
+    msg: "Mode Repository : {{ cmdb_repository_mode }}"
+
 # Déterminer le serveur manager - CRUCIAL: Cette étape doit être exécutée avant d'utiliser cmdb_manager_host
-- name: Déterminer le serveur manager
+- name: (main) Déterminer le serveur manager
   set_fact:
     cmdb_manager_host: "{{ groups[cmdb_repository.manager_group | default('cmdb_repository')][0] if (cmdb_repository.manager_group | default('cmdb_repository') in groups) and (groups[cmdb_repository.manager_group | default('cmdb_repository')]|length > 0) else 'localhost' }}"
+
+- name: (main) Afficher le serveur manager
+  debug:
+    msg: "cmdb_manager_host : {{ cmdb_manager_host }}"
 
 # Configuration du repository en mode "local"
 - name: (main) Configuration du repository en mode "local"
@@ -67,53 +75,36 @@
   when: cmdb_repository_mode == "local"
 
 # Configuration du repository en mode "manager" avec gestion des permissions
+# Simplifié car nous supposons que les répertoires sont déjà créés par le play initial
 - name: (main) Configuration du repository en mode "manager"
   block:
-    - name: "(main) Création du répertoire d'inventaire sur le serveur manager ({{ cmdb_manager_host }})"
+    - name: (main) Vérifier l'accès en écriture sur les répertoires du serveur manager
       delegate_to: "{{ cmdb_manager_host }}"
-      become: true  # Activer sudo pour cette tâche sur le manager
-      file:
-        path: "{{ item }}"
-        state: directory
-        mode: '0755'
-        owner: "{{ ansible_user | default(ansible_user_id) | default(lookup('env', 'USER')) }}"
-        group: "{{ ansible_user | default(ansible_user_id) | default(lookup('env', 'USER')) }}"
+      become: false  # Ne pas utiliser sudo pour le test d'accès avec l'utilisateur réel
+      shell: "touch {{ item }}/test_write_access && rm -f {{ item }}/test_write_access"
       loop:
         - "{{ cmdb_repository.directory }}"
-        - "{{ cmdb_repository.directory }}/diagnostics"
         - "{{ cmdb_repository.directory }}/reports"
-        - "{{ cmdb_repository.fallback_directory }}"
-      run_once: true
-      register: manager_dir_creation
-      ignore_errors: true  # Continuer même si cette tâche échoue
-      
-    - name: "(main) Vérifier l'accès en écriture sur les répertoires du serveur manager ({{ cmdb_manager_host }})"
-      delegate_to: "{{ cmdb_manager_host }}"
-      become: true
-      shell: "touch {{ item }}/test_write_access && rm {{ item }}/test_write_access"
-      loop:
-        - "{{ cmdb_repository.directory }}"
         - "{{ cmdb_repository.directory }}/diagnostics"
-        - "{{ cmdb_repository.directory }}/reports"
       register: write_test
       changed_when: false
       ignore_errors: true
       
-    - name: "(main) Définir l'existence du répertoire manager avec accès en écriture ({{ cmdb_manager_host }})"
+    - name: (main) Définir l'existence du répertoire manager avec accès en écriture
       set_fact:
-        cmdb_inventory_repository_dir_exists: "{{ (manager_dir_creation is success) and (write_test is success) }}"
+        cmdb_inventory_repository_dir_exists: "{{ not write_test.failed | default(true) }}"
         cmdb_inventory_repository_dir: "{{ cmdb_repository.directory }}"
         cmdb_inventory_repository_host: "{{ cmdb_manager_host }}"
 
-    - name: "(main) Message de diagnostic si problème d'accès ({{ cmdb_manager_host }})"
+    - name: (main) Message de diagnostic si problème d'accès
       debug:
         msg: "AVERTISSEMENT: Problèmes de permissions sur le répertoire {{ cmdb_repository.directory }}. Utilisation du répertoire alternatif."
-      when: not cmdb_inventory_repository_dir_exists | default(true)
+      when: write_test.failed | default(false)
 
-    - name: "(main) Définir le répertoire d'inventaire alternatif si nécessaire ({{ cmdb_manager_host }})"
+    - name: (main) Définir le répertoire d'inventaire alternatif si nécessaire
       set_fact:
         cmdb_inventory_repository_dir: "{{ cmdb_repository.fallback_directory }}"
-      when: not cmdb_inventory_repository_dir_exists | default(true)
+      when: write_test.failed | default(false)
   when: cmdb_repository_mode == "manager"
 
 # S'assurer que les variables de repository sont toujours définies
@@ -122,34 +113,6 @@
     cmdb_inventory_repository_dir: "{{ cmdb_inventory_repository_dir | default(cmdb_repository.directory | default('~/cmdb_inventory')) }}"
     cmdb_inventory_repository_host: "{{ cmdb_inventory_repository_host | default('localhost') }}"
     cmdb_inventory_repository_dir_exists: "{{ cmdb_inventory_repository_dir_exists | default(false) }}"
-
-# Création du répertoire de diagnostics sur le repository avec les bonnes permissions
-- name: (main) Création du répertoire de diagnostics sur le repository
-  delegate_to: "{{ cmdb_inventory_repository_host }}"
-  become: "{{ cmdb_inventory_repository_host != 'localhost' }}"
-  file:
-    path: "{{ cmdb_inventory_repository_dir }}/diagnostics"
-    state: directory
-    mode: '0755'
-    # Ajouter l'utilisateur et le groupe pour assurer les bonnes permissions
-    owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
-    group: "{{ ansible_user | default(lookup('env', 'USER')) }}"
-  run_once: true
-  ignore_errors: true
-
-# S'assurer que le répertoire principal a les bonnes permissions
-- name: (main) S'assurer que le répertoire principal a les bonnes permissions
-  delegate_to: "{{ cmdb_inventory_repository_host }}"
-  become: "{{ cmdb_inventory_repository_host != 'localhost' }}"
-  file:
-    path: "{{ cmdb_inventory_repository_dir }}"
-    state: directory
-    mode: '0755'
-    # Ajouter l'utilisateur et le groupe pour assurer les bonnes permissions
-    owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
-    group: "{{ ansible_user | default(lookup('env', 'USER')) }}"
-  run_once: true
-  ignore_errors: true
 
 # Création du répertoire temporaire sur les serveurs cibles
 - name: (main) Création du répertoire temporaire sur les serveurs cibles
