@@ -79,7 +79,7 @@
 # Cette troisième partie génère des statistiques et des rapports consolidés
 - name: Générer des statistiques et rapports consolidés
   hosts: cmdb_repository
-  gather_facts: false
+  gather_facts: true  # Changed to true to avoir ansible_user_id issues
   become: true
 
   vars:
@@ -118,7 +118,7 @@
           
           Serveurs par distribution:
           {% set distributions = {} %}
-          {% for file in lookup('fileglob', repository_base_dir'/reports/*_cmdb_inventory.json', wantlist=True) %}
+          {% for file in lookup('fileglob', repository_base_dir + '/reports/*_cmdb_inventory.json', wantlist=True) %}
           {% set json_content = lookup('file', file) | from_json %}
           {% set distro = json_content.software.os.distribution | default('Unknown') %}
           {% set distro_version = json_content.software.os.distribution_version | default('Unknown') %}
@@ -138,8 +138,8 @@
     - name: Corriger les permissions du rapport de synthèse
       file:
         path: "{{ repository_base_dir }}/rapport_synthese.txt"
-        owner: "{{ ansible_user_id }}"
-        group: "{{ ansible_user_id }}"
+        owner: "{{ ansible_user_id | default(ansible_user) | default(lookup('env', 'USER')) }}"
+        group: "{{ ansible_user_id | default(ansible_user) | default(lookup('env', 'USER')) }}"
         mode: '0644'
       ignore_errors: true
       
