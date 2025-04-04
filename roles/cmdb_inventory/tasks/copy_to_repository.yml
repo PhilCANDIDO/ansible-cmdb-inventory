@@ -4,13 +4,17 @@
 
 - name: (copy_to_repository) Récupérer le nom du fichier d'inventaire temporaire
   set_fact:
-    temp_inventory_file: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
-    temp_diagnostic_file: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+    temp_inventory_file: "{{ temp_cmdb_controller }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+    temp_diagnostic_file: "{{ temp_cmdb_controller }}/diagnostic.yml"
 
 - name: (copy_to_repository) Vérifier si le fichier d'inventaire existe
   stat:
     path: "{{ temp_inventory_file }}"
   register: inventory_file_stat
+
+- name: (copy_to_repository) Afficher le chemin du fichier d'inventaire
+  debug:
+    msg: "{{ temp_inventory_file }}"
 
 - name: (copy_to_repository) Vérifier si le fichier de diagnostic existe
   stat:
@@ -18,10 +22,14 @@
   register: diagnostic_file_stat
   when: cmdb_collect.self_diagnostic | default(true) | bool
 
+- name: (copy_to_repository) Afficher le chemin du fichier diagnostic
+  debug:
+    msg: "{{ temp_diagnostic_file }}"
+
 # Copier le fichier d'inventaire vers le repository
 - name: (copy_to_repository) Copier le fichier d'inventaire vers le repository
   block:
-    - name: Créer le répertoire reports sur le serveur repository si nécessaire
+    - name: (copy_to_repository) Créer le répertoire reports sur le serveur repository si nécessaire
       delegate_to: "{{ cmdb_inventory_repository_host }}"
       become: true
       file:

@@ -161,10 +161,18 @@
   when: remote_dir_creation is success
   
 # Étape 1: Récupérer les rapports CMDB vers un dossier temporaire sur le contrôleur
+- name: (main) Déterminer le dossier temporaire sur le node controleur
+  set_fact:
+    temp_cmdb_controller: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}"
+
+- name: (main) Afficher le nom du dossier temporaire sur le node controleur
+  debug:
+    msg: "Temp cmdb controller : {{ temp_cmdb_controller }}"
+
 - name: (main) Récupérer les rapports CMDB dans un dossier temporaire du contrôleur
   fetch:
     src: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
-    dest: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+    dest: "{{ temp_cmdb_controller }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
     flat: yes
   ignore_errors: true
   when: remote_dir_creation is success
@@ -173,7 +181,7 @@
 - name: (main) Récupérer les diagnostics dans un dossier temporaire du contrôleur
   fetch:
     src: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
-    dest: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/diagnostics/{{ ansible_hostname | default(inventory_hostname) }}_diagnostic.yml"
+    dest: "{{ temp_cmdb_controller }}/diagnostics/{{ ansible_hostname | default(inventory_hostname) }}_diagnostic.yml"
     flat: yes
   ignore_errors: true
   when: 
@@ -199,7 +207,7 @@
 # Nettoyer le répertoire temporaire sur le node controller
 - name: (main) Nettoyer le répertoire temporaire sur le node controller 
   file:
-    path: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}"
+    path: "{{ temp_cmdb_controller }}"
     state: absent
   run_once: true
   delegate_to: localhost
