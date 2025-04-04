@@ -1,0 +1,89 @@
+# roles/cmdb_inventory/tasks/copy_to_repository.yml
+---
+# Transfert des fichiers temporaires vers le serveur repository
+
+- name: (copy_to_repository) Récupérer le nom du fichier d'inventaire temporaire
+  set_fact:
+    temp_inventory_file: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+    temp_diagnostic_file: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+
+- name: (copy_to_repository) Vérifier si le fichier d'inventaire existe
+  stat:
+    path: "{{ temp_inventory_file }}"
+  register: inventory_file_stat
+
+- name: (copy_to_repository) Vérifier si le fichier de diagnostic existe
+  stat:
+    path: "{{ temp_diagnostic_file }}"
+  register: diagnostic_file_stat
+  when: cmdb_collect.self_diagnostic | default(true) | bool
+
+# Copier le fichier d'inventaire vers le repository
+- name: (copy_to_repository) Copier le fichier d'inventaire vers le repository
+  block:
+    - name: Créer le répertoire reports sur le serveur repository si nécessaire
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
+      become: true
+      file:
+        path: "{{ cmdb_inventory_repository_dir }}/reports"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user | default('ansible') }}"
+        group: "{{ ansible_user | default('ansible') }}"
+      run_once: true
+      ignore_errors: true
+
+    - name: (copy_to_repository) Copier le fichier d'inventaire vers le repository
+      copy:
+        src: "{{ temp_inventory_file }}"
+        dest: "{{ cmdb_inventory_repository_dir }}/reports/{{ inventory_hostname }}_cmdb_inventory.{{ cmdb_output_format }}"
+        mode: '0644'
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
+      become: true
+      ignore_errors: true
+  when: inventory_file_stat.stat.exists | default(false)
+
+# Copier le fichier de diagnostic vers le repository
+- name: (copy_to_repository) Copier le fichier de diagnostic vers le repository
+  block:
+    - name: Créer le répertoire diagnostics sur le serveur repository si nécessaire
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
+      become: true
+      file:
+        path: "{{ cmdb_inventory_repository_dir }}/diagnostics"
+        state: directory
+        mode: '0755'
+        owner: "{{ ansible_user | default('ansible') }}"
+        group: "{{ ansible_user | default('ansible') }}"
+      run_once: true
+      ignore_errors: true
+
+    - name: (copy_to_repository) Copier le fichier de diagnostic vers le repository
+      copy:
+        src: "{{ temp_diagnostic_file }}"
+        dest: "{{ cmdb_inventory_repository_dir }}/diagnostics/{{ inventory_hostname }}_diagnostic.yml"
+        mode: '0644'
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
+      become: true
+      ignore_errors: true
+  when: 
+    - cmdb_collect.self_diagnostic | default(true) | bool
+    - diagnostic_file_stat.stat.exists | default(false)
+
+# Journaliser l'achèvement du transfert
+- name: (copy_to_repository) Journaliser l'achèvement du transfert dans le repository
+  lineinfile:
+    path: "{{ cmdb_inventory_repository_dir }}/inventaire_success.log"
+    line: "{{ inventory_hostname }} - {{ ansible_date_time.iso8601 | default(now()) }}"
+    create: yes
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: true
+  ignore_errors: true
+  when: inventory_file_stat.stat.exists | default(false)
+
+# Enregistrer les informations sur ce transfert
+- name: (copy_to_repository) Enregistrer les métadonnées de ce transfert
+  set_fact:
+    cmdb_inventory_transferred: true
+    cmdb_inventory_transfer_time: "{{ ansible_date_time.iso8601 | default(now()) }}"
+  when: inventory_file_stat.stat.exists | default(false)

@@ -188,3 +188,21 @@
   when: 
     - remote_dir_creation is success
     - cmdb_inventory_cleanup | default(true) | bool
+
+# Copier les fichiers collectés vers le serveur repository
+- name: (main) Transfert des fichiers collectés vers le serveur repository
+  include_tasks: copy_to_repository.yml
+  when: 
+    - remote_dir_creation is success
+    - cmdb_repository_mode == "manager"  # Uniquement en mode manager
+
+# Nettoyer le répertoire temporaire sur le node controller
+- name: (main) Nettoyer le répertoire temporaire sur le node controller 
+  file:
+    path: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}"
+    state: absent
+  run_once: true
+  delegate_to: localhost
+  when: 
+    - remote_dir_creation is success
+    - cmdb_repository_mode == "manager"  # Uniquement en mode manager
