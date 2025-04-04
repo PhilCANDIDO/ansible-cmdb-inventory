@@ -17,7 +17,7 @@ cmdb_repository:
   # Répertoire où seront stockés les rapports
   # - En mode "local": sur la machine exécutant le playbook
   # - En mode "manager": sur le serveur manager
-  directory: "~/cmdb_inventory"
+  directory: "/opt/cmdb/inventory"
   
   # Répertoire de secours si le répertoire principal n'est pas accessible
   fallback_directory: "/tmp/cmdb_inventory_repository"

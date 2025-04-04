@@ -4,91 +4,15 @@
 #   - Dans AWX/Tower : Utiliser ce playbook avec l'inventaire associé
 
 ---
-# Cette première partie configure le serveur repository qui stockera les données CMDB
-- name: Configuration du serveur repository CMDB
-  hosts: cmdb_repository
-  gather_facts: false
-  become: true
-  
-  vars:
-    repository_base_dir: "/opt/cmdb/inventory"
-    repository_owner: "{{ lookup('env', 'USER') }}"  # Par défaut, l'utilisateur actuel
-    repository_group: "{{ lookup('env', 'USER') }}"  # Par défaut, le groupe de l'utilisateur actuel
-  
-  tasks:
-    - name: Vérifier la connectivité SSH
-      wait_for_connection:
-        timeout: 30
-      register: connection_status
-      ignore_errors: true
-      
-    - name: Collecter les faits basiques pour le repository
-      setup:
-        gather_subset:
-          - '!all'
-          - 'min'
-      when: connection_status is success
-      register: facts_result
-      ignore_errors: true
-      
-    - name: Déterminer l'utilisateur Ansible actif
-      set_fact:
-        repository_owner: "{{ ansible_user_id }}"
-        repository_group: "{{ ansible_user_id }}"
-      when: connection_status is success and facts_result is success
-      
-    - name: Créer les répertoires du repository avec permissions correctes
-      file:
-        path: "{{ item }}"
-        state: directory
-        mode: '0755'
-        owner: "{{ repository_owner }}"
-        group: "{{ repository_group }}"
-      with_items:
-        - "{{ repository_base_dir }}"
-        - "{{ repository_base_dir }}/diagnostics"
-        - "{{ repository_base_dir }}/reports"
-        - "/tmp/cmdb_inventory_repository"
-      when: connection_status is success
-      
-    - name: Vérifier l'accès en écriture (test pratique)
-      shell: "touch {{ item }}/test_write_access && rm {{ item }}/test_write_access"
-      with_items:
-        - "{{ repository_base_dir }}"
-        - "{{ repository_base_dir }}/diagnostics"
-        - "{{ repository_base_dir }}/reports"
-      register: write_test
-      changed_when: false
-      failed_when: false
-      when: connection_status is success
-      
-    - name: Afficher un avertissement si des problèmes de permission persistent
-      debug:
-        msg: "AVERTISSEMENT: Le répertoire {{ item.item }} n'a pas les permissions d'écriture nécessaires pour l'utilisateur {{ repository_owner }}"
-      when: 
-        - item.rc is defined
-        - item.rc != 0
-      loop: "{{ write_test.results | default([]) }}"
-      
-    - name: Créer des fichiers de logs pour le suivi
-      file:
-        path: "{{ repository_base_dir }}/{{ item }}"
-        state: touch
-        mode: '0644'
-        owner: "{{ repository_owner }}"
-        group: "{{ repository_group }}"
-      with_items:
-        - "inaccessible_hosts.log"
-        - "inventaire_success.log"
-        - "failed_fetches.log"
-      when: connection_status is success
-
-# Cette deuxième partie exécute l'inventaire sur tous les serveurs sauf le repository
+# Exécute l'inventaire sur tous les serveurs sauf le repository
 - name: Collecter les informations pour la CMDB
   hosts: all:!cmdb_repository
   gather_facts: false
   # Augmente le timeout pour gérer les serveurs lents
   timeout: 60
+
+  vars:
+    repository_base_dir: /opt/cmdb/inventory
   
   pre_tasks:
     - name: Vérifier la connectivité SSH
@@ -157,6 +81,9 @@
   hosts: cmdb_repository
   gather_facts: false
   become: true
+
+  vars:
+    repository_base_dir: /opt/cmdb/inventory
   
   tasks:
     - name: Vérifier le nombre de serveurs avec inventaire réussi
