@@ -36,10 +36,10 @@
     - generate
     - script
 
-# Exécuter le script Python pour générer le rapport Excel
+# Exécuter le script Python pour générer le rapport Excel en utilisant l'environnement virtuel
 - name: Générer le rapport Excel
   command:
-    cmd: "python3 {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
+    cmd: "{{ cmdb_report.temp_dir }}/venv/bin/python3 {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
     chdir: "{{ cmdb_report.temp_dir }}"
   delegate_to: localhost
   become: false

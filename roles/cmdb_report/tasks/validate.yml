@@ -1,57 +1,132 @@
 ---
 # tasks/validate.yml - Validation des prérequis pour la génération du rapport
 
-# Vérifier la présence des modules Python requis sur localhost
-- name: Vérifier les dépendances Python sur localhost
+# Vérifier la famille de distribution Linux pour adapter les commandes d'installation
+- name: Obtenir les informations de la distribution
+  setup:
+    gather_subset:
+      - '!all'
+      - 'distribution'
   delegate_to: localhost
   become: false
-  block:
-    - name: Vérifier openpyxl
-      command: python3 -c "import openpyxl"
-      register: openpyxl_check
-      changed_when: false
-      failed_when: false
-    
-    - name: Vérifier jmespath
-      command: python3 -c "import jmespath"
-      register: jmespath_check
-      changed_when: false
-      failed_when: false
-      
-    - name: Vérifier json
-      command: python3 -c "import json"
-      register: json_check
-      changed_when: false
-      failed_when: false
-    
-    - name: Préparer le message d'erreur pour les modules manquants
-      set_fact:
-        missing_modules: []
-      
-    - name: Ajouter openpyxl à la liste des modules manquants si nécessaire
-      set_fact:
-        missing_modules: "{{ missing_modules + ['openpyxl'] }}"
-      when: openpyxl_check.rc != 0
-      
-    - name: Ajouter jmespath à la liste des modules manquants si nécessaire
-      set_fact:
-        missing_modules: "{{ missing_modules + ['jmespath'] }}"
-      when: jmespath_check.rc != 0
-      
-    - name: Ajouter json à la liste des modules manquants si nécessaire
-      set_fact:
-        missing_modules: "{{ missing_modules + ['json'] }}"
-      when: json_check.rc != 0
-      
-    - name: Afficher les modules manquants
-      debug:
-        msg: "Modules Python manquants: {{ missing_modules | join(', ') }}"
-      when: missing_modules | length > 0
-      
-    - name: Échec si des modules sont manquants
-      fail:
-        msg: "Des modules Python requis sont manquants sur localhost. Installez-les avec 'pip install {{ missing_modules | join(' ') }}'"
-      when: missing_modules | length > 0
+  tags:
+    - validate
+    - os_check
+
+# Installer les packages nécessaires pour l'environnement virtuel selon la distribution
+- name: Installer les packages nécessaires pour les environnements virtuels (Debian/Ubuntu)
+  apt:
+    name:
+      - python3-venv
+      - python3-full
+    state: present
+  delegate_to: localhost
+  become: true
+  when: ansible_os_family == "Debian"
+  ignore_errors: true
+  register: venv_packages_debian
+  tags:
+    - validate
+    - dependencies
+
+- name: Installer les packages nécessaires pour les environnements virtuels (RedHat/CentOS)
+  yum:
+    name:
+      - python3
+      - python3-devel
+    state: present
+  delegate_to: localhost
+  become: true
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+  register: venv_packages_redhat
+  tags:
+    - validate
+    - dependencies
+
+- name: Installer les packages nécessaires pour les environnements virtuels (SUSE)
+  zypper:
+    name:
+      - python3
+      - python3-devel
+    state: present
+  delegate_to: localhost
+  become: true
+  when: ansible_os_family == "Suse"
+  ignore_errors: true
+  register: venv_packages_suse
+  tags:
+    - validate
+    - dependencies
+
+# Créer un environnement virtuel pour l'exécution du script
+- name: Créer un environnement virtuel Python
+  command: "python3 -m venv {{ cmdb_report.temp_dir }}/venv"
+  args:
+    creates: "{{ cmdb_report.temp_dir }}/venv"
+  delegate_to: localhost
+  become: false
+  register: venv_creation
+  tags:
+    - validate
+    - dependencies
+
+# Mettre à jour pip dans l'environnement virtuel
+- name: Mettre à jour pip dans l'environnement virtuel
+  pip:
+    name: pip
+    state: latest
+    virtualenv: "{{ cmdb_report.temp_dir }}/venv"
+  delegate_to: localhost
+  become: false
+  register: pip_update
+  until: pip_update is success
+  retries: 3
+  delay: 5
+  tags:
+    - validate
+    - dependencies
+
+# Installer les dépendances Python dans l'environnement virtuel
+- name: Installer les dépendances Python dans l'environnement virtuel
+  pip:
+    name:
+      - openpyxl>=3.0.0
+      - jmespath>=0.10.0
+    state: present
+    virtualenv: "{{ cmdb_report.temp_dir }}/venv"
+  delegate_to: localhost
+  become: false
+  register: pip_install
+  until: pip_install is success
+  retries: 3
+  delay: 5
+  tags:
+    - validate
+    - dependencies
+
+# Vérifier que les modules sont correctement installés
+- name: Vérifier l'installation des modules dans l'environnement virtuel
+  command: "{{ cmdb_report.temp_dir }}/venv/bin/python3 -c 'import {{ item }}'"
+  with_items:
+    - openpyxl
+    - jmespath
+    - json
+  delegate_to: localhost
+  register: module_check
+  failed_when: false
+  changed_when: false
+  ignore_errors: true
+  tags:
+    - validate
+    - dependencies
+
+# Afficher un avertissement si certains modules ne sont pas disponibles
+- name: Afficher un avertissement pour les modules manquants
+  debug:
+    msg: "Attention: le module {{ item.item }} n'est pas disponible. La génération du rapport pourrait échouer."
+  loop: "{{ module_check.results }}"
+  when: item.rc != 0
   tags:
     - validate
     - dependencies

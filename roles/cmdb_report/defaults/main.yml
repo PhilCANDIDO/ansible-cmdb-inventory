@@ -71,3 +71,6 @@ cmdb_email:
   
   # Attacher le rapport Excel
   attach_report: true
+
+# Chemin vers l'environnement virtuel Python (si déjà créé)
+cmdb_venv_path: "{{ cmdb_report.temp_dir }}/venv"

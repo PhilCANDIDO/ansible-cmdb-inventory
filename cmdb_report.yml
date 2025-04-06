@@ -4,18 +4,51 @@
 
 - name: Générer et envoyer le rapport CMDB
   hosts: cmdb_repository
-  become: true
-  become_user: root
   gather_facts: true
   
   pre_tasks:
-    - name: S'assurer que les dépendances Python sont installées
+    # Installer les packages nécessaires pour l'environnement virtuel selon la distribution
+    - name: Installer les packages nécessaires pour les environnements virtuels (Debian/Ubuntu)
+      apt:
+        name:
+          - python3-venv
+          - python3-full
+        state: present
+      become: true
+      when: ansible_os_family == "Debian"
+      ignore_errors: true
+      
+    - name: Installer les packages nécessaires pour les environnements virtuels (RedHat/CentOS)
+      yum:
+        name:
+          - python3
+          - python3-devel
+        state: present
+      become: true
+      when: ansible_os_family == "RedHat"
+      ignore_errors: true
+      
+    - name: Créer un répertoire temporaire pour l'environnement virtuel
+      file:
+        path: "/tmp/cmdb_venv"
+        state: directory
+        mode: '0755'
+      become: false
+      
+    - name: Créer un environnement virtuel Python
+      command: "python3 -m venv /tmp/cmdb_venv"
+      args:
+        creates: "/tmp/cmdb_venv"
+      become: false
+      
+    - name: Installer les dépendances Python dans l'environnement virtuel
       pip:
         name:
           - openpyxl>=3.0.0
           - jmespath>=0.10.0
         state: present
-      become: true
+        virtualenv: "/tmp/cmdb_venv"
+      become: false
       register: pip_result
       until: pip_result is success
       retries: 3
@@ -24,6 +57,9 @@
   roles:
     - role: cmdb_report
       vars:
+        # Configuration spécifique pour utiliser l'environnement virtuel créé
+        cmdb_venv_path: "/tmp/cmdb_venv"
+        
         # Utilisation du repository configuré dans le rôle
         cmdb_repository:
           mode: "manager"
