@@ -1,0 +1,33 @@
+---
+galaxy_info:
+  author: Philippe CANDIDO
+  description: Generate Excel reports from cmdb_inventory data and send by email
+  company: CPF Informatique
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+        - bookworm
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+  galaxy_tags:
+    - cmdb
+    - inventory
+    - reporting
+    - excel
+    - email
+
+dependencies:
+  # Dépendance optionnelle sur le rôle cmdb_inventory
+  # - role: cmdb_inventory

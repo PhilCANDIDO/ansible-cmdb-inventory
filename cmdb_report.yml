@@ -1,0 +1,73 @@
+---
+# Playbook pour générer un rapport Excel à partir des données CMDB
+# Usage: ansible-playbook -i inventory.ini cmdb_report.yml
+
+- name: Générer et envoyer le rapport CMDB
+  hosts: cmdb_repository
+  become: true
+  become_user: root
+  gather_facts: true
+  
+  pre_tasks:
+    - name: S'assurer que les dépendances Python sont installées
+      pip:
+        name:
+          - openpyxl>=3.0.0
+          - jmespath>=0.10.0
+        state: present
+      become: true
+      register: pip_result
+      until: pip_result is success
+      retries: 3
+      delay: 5
+      
+  roles:
+    - role: cmdb_report
+      vars:
+        # Utilisation du repository configuré dans le rôle
+        cmdb_repository:
+          mode: "manager"
+          manager_group: "cmdb_repository"
+          directory: "/opt/cmdb/inventory"
+          
+        # Configuration du rapport
+        cmdb_report:
+          filename: "cmdb_inventory_report_{{ ansible_date_time.date }}.xlsx"
+          max_age_days: 7  # Ne considérer que les données de moins d'une semaine
+          
+        # Configuration de l'email
+        cmdb_email:
+          enabled: true
+          smtp:
+            host: "{{ vault_smtp_host | default('smtp.example.com') }}"
+            port: "{{ vault_smtp_port | default(25) }}"
+            use_tls: "{{ vault_smtp_use_tls | default(false) }}"
+            use_ssl: "{{ vault_smtp_use_ssl | default(false) }}"
+            username: "{{ vault_smtp_username | default('') }}"
+            password: "{{ vault_smtp_password | default('') }}"
+          from: "{{ vault_smtp_from | default('cmdb-report@example.com') }}"
+          to: "{{ vault_smtp_recipients | default(['admin@example.com']) }}"
+          subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date }}"
+          body_type: "html"
+          attach_report: true
+          
+  post_tasks:
+    - name: Afficher le chemin du rapport généré
+      debug:
+        msg: "Rapport généré avec succès: {{ cmdb_report_excel_path | default('N/A') }}"
+      when: cmdb_report_excel_path is defined
+      
+    - name: Nettoyer les anciens rapports (plus de 30 jours)
+      find:
+        paths: "{{ cmdb_repository.directory }}/reports"
+        patterns: "cmdb_inventory_report_*.xlsx"
+        age: 30d
+        recurse: no
+      register: old_reports
+      
+    - name: Supprimer les anciens rapports
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_reports.files }}"
+      when: old_reports.matched > 0

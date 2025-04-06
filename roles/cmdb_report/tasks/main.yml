@@ -1,0 +1,71 @@
+---
+# tasks file for roles/cmdb_report
+
+# Validation des prérequis
+- name: Inclusion des tâches de validation
+  include_tasks: validate.yml
+  tags:
+    - always
+    - validate
+
+# Détermination du serveur repository
+- name: Déterminer le mode de repository
+  set_fact:
+    cmdb_repository_mode: "{{ cmdb_repository.mode | default('local') }}"
+  tags:
+    - always
+
+- name: Déterminer le serveur manager
+  set_fact:
+    cmdb_manager_host: "{{ groups[cmdb_repository.manager_group | default('cmdb_repository')][0] if (cmdb_repository.manager_group | default('cmdb_repository') in groups) and (groups[cmdb_repository.manager_group | default('cmdb_repository')]|length > 0) else 'localhost' }}"
+  tags:
+    - always
+
+- name: Afficher les informations du repository
+  debug:
+    msg: 
+      - "Mode repository: {{ cmdb_repository_mode }}"
+      - "Serveur repository: {{ cmdb_manager_host }}"
+      - "Répertoire des rapports: {{ cmdb_repository.directory }}/reports"
+  tags:
+    - always
+    - debug
+
+# Collecte et traitement des données JSON
+- name: Inclusion des tâches de collecte de données
+  include_tasks: collect_data.yml
+  tags:
+    - always
+    - collect
+
+# Génération du rapport Excel
+- name: Inclusion des tâches de génération du rapport Excel
+  include_tasks: generate_excel.yml
+  when: cmdb_files is defined and cmdb_files|length > 0
+  tags:
+    - always
+    - generate
+    - excel
+
+# Envoi par email
+- name: Inclusion des tâches d'envoi par email
+  include_tasks: send_email.yml
+  when: 
+    - cmdb_email.enabled | bool
+    - cmdb_report_excel_path is defined
+  tags:
+    - always
+    - email
+    - send
+
+# Nettoyage
+- name: Nettoyer les fichiers temporaires
+  file:
+    path: "{{ cmdb_report.temp_dir }}"
+    state: absent
+  delegate_to: localhost
+  become: false
+  ignore_errors: true
+  tags:
+    - always
+    - cleanup

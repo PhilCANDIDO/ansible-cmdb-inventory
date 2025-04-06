@@ -1,0 +1,113 @@
+---
+# tasks/validate.yml - Validation des prérequis pour la génération du rapport
+
+# Vérifier la présence des modules Python requis sur localhost
+- name: Vérifier les dépendances Python sur localhost
+  delegate_to: localhost
+  become: false
+  block:
+    - name: Vérifier openpyxl
+      command: python3 -c "import openpyxl"
+      register: openpyxl_check
+      changed_when: false
+      failed_when: false
+    
+    - name: Vérifier jmespath
+      command: python3 -c "import jmespath"
+      register: jmespath_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Vérifier json
+      command: python3 -c "import json"
+      register: json_check
+      changed_when: false
+      failed_when: false
+    
+    - name: Préparer le message d'erreur pour les modules manquants
+      set_fact:
+        missing_modules: []
+      
+    - name: Ajouter openpyxl à la liste des modules manquants si nécessaire
+      set_fact:
+        missing_modules: "{{ missing_modules + ['openpyxl'] }}"
+      when: openpyxl_check.rc != 0
+      
+    - name: Ajouter jmespath à la liste des modules manquants si nécessaire
+      set_fact:
+        missing_modules: "{{ missing_modules + ['jmespath'] }}"
+      when: jmespath_check.rc != 0
+      
+    - name: Ajouter json à la liste des modules manquants si nécessaire
+      set_fact:
+        missing_modules: "{{ missing_modules + ['json'] }}"
+      when: json_check.rc != 0
+      
+    - name: Afficher les modules manquants
+      debug:
+        msg: "Modules Python manquants: {{ missing_modules | join(', ') }}"
+      when: missing_modules | length > 0
+      
+    - name: Échec si des modules sont manquants
+      fail:
+        msg: "Des modules Python requis sont manquants sur localhost. Installez-les avec 'pip install {{ missing_modules | join(' ') }}'"
+      when: missing_modules | length > 0
+  tags:
+    - validate
+    - dependencies
+
+# Vérifier l'existence du répertoire repository
+- name: Vérifier l'accès au répertoire repository
+  stat:
+    path: "{{ cmdb_repository.directory }}/reports"
+  register: repository_dir_stat
+  delegate_to: "{{ cmdb_manager_host }}"
+  become: false
+  ignore_errors: true
+  tags:
+    - validate
+    - repository
+
+- name: Échec si le répertoire repository n'existe pas
+  fail:
+    msg: "Le répertoire repository '{{ cmdb_repository.directory }}/reports' n'existe pas sur {{ cmdb_manager_host }}."
+  when: not repository_dir_stat.stat.exists | default(false)
+  tags:
+    - validate
+    - repository
+
+# Vérifier la possibilité de créer le répertoire temporaire
+- name: Créer le répertoire temporaire pour le traitement
+  file:
+    path: "{{ cmdb_report.temp_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  register: temp_dir_creation
+  tags:
+    - validate
+    - tempdir
+
+- name: Échec si le répertoire temporaire ne peut pas être créé
+  fail:
+    msg: "Impossible de créer le répertoire temporaire '{{ cmdb_report.temp_dir }}' sur localhost."
+  when: temp_dir_creation is failed
+  tags:
+    - validate
+    - tempdir
+
+# Si envoi par email activé, vérifier la configuration
+- name: Vérifier la configuration email
+  assert:
+    that:
+      - cmdb_email.smtp.host != ""
+      - cmdb_email.smtp.port | int > 0
+      - cmdb_email.from != ""
+      - cmdb_email.to | length > 0
+    fail_msg: "Configuration email incomplète. Vérifiez les paramètres cmdb_email."
+    success_msg: "Configuration email valide."
+  when: cmdb_email.enabled | bool
+  tags:
+    - validate
+    - email

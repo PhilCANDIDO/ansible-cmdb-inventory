@@ -1,0 +1,68 @@
+---
+# tasks/generate_excel.yml - Génération du rapport Excel
+
+# Création du répertoire pour l'exécution du script Python
+- name: Créer le répertoire pour l'exécution du script
+  file:
+    path: "{{ cmdb_report.temp_dir }}/python"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  tags:
+    - generate
+    - setup
+
+# Créer la configuration pour le script Python
+- name: Créer la configuration pour la génération du rapport Excel
+  template:
+    src: report_config.j2
+    dest: "{{ cmdb_report.temp_dir }}/report_config.json"
+  delegate_to: localhost
+  become: false
+  tags:
+    - generate
+    - config
+
+# Copier le script Python depuis les files du rôle
+- name: Copier le script Python pour la génération du rapport Excel
+  copy:
+    src: generate_excel.py
+    dest: "{{ cmdb_report.temp_dir }}/generate_excel.py"
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  tags:
+    - generate
+    - script
+
+# Exécuter le script Python pour générer le rapport Excel
+- name: Générer le rapport Excel
+  command:
+    cmd: "python3 {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
+    chdir: "{{ cmdb_report.temp_dir }}"
+  delegate_to: localhost
+  become: false
+  register: excel_generation
+  failed_when: excel_generation.rc != 0
+  changed_when: true
+  tags:
+    - generate
+    - execute
+
+# Afficher le résultat de la génération
+- name: Afficher le résultat de la génération du rapport Excel
+  debug:
+    msg: "{{ excel_generation.stdout_lines }}"
+  when: excel_generation.stdout_lines is defined and excel_generation.stdout_lines | length > 0
+  tags:
+    - generate
+    - debug
+
+# Enregistrer le chemin du fichier Excel pour l'envoi ultérieur par email
+- name: Enregistrer le chemin du fichier Excel
+  set_fact:
+    cmdb_report_excel_path: "{{ cmdb_report.temp_dir }}/{{ cmdb_report.filename }}"
+  tags:
+    - generate
+    - path

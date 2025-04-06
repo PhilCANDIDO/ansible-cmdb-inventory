@@ -1,0 +1,18 @@
+# Exemple de fichier Vault pour les informations sensibles
+# Pour créer un fichier vault crypté, utilisez:
+# ansible-vault create group_vars/all/vault.yml
+
+# Configuration SMTP
+vault_smtp_host: "smtp.example.com"
+vault_smtp_port: 587
+vault_smtp_use_tls: true
+vault_smtp_use_ssl: false
+vault_smtp_username: "cmdb-reports@example.com"
+vault_smtp_password: "motdepassetressecurise"
+vault_smtp_from: "cmdb-reports@example.com"
+
+# Liste des destinataires
+vault_smtp_recipients:
+  - "equipe-infrastructure@example.com"
+  - "responsable-it@example.com"
+  - "direction@example.com"

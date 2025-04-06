@@ -1,0 +1,77 @@
+---
+# tasks/send_email.yml - Envoi du rapport par email
+
+# Vérifier si le rapport Excel existe
+- name: Vérifier si le rapport Excel existe
+  stat:
+    path: "{{ cmdb_report_excel_path }}"
+  register: excel_file_stat
+  delegate_to: localhost
+  become: false
+  tags:
+    - email
+    - check
+
+- name: Interrompre si le rapport n'existe pas
+  fail:
+    msg: "Le rapport Excel n'existe pas à l'emplacement {{ cmdb_report_excel_path }}"
+  when: not excel_file_stat.stat.exists
+  tags:
+    - email
+    - check
+
+# Créer le corps du message à partir du template
+- name: Créer le corps du message email
+  template:
+    src: email_body.j2
+    dest: "{{ cmdb_report.temp_dir }}/email_body.{% if cmdb_email.body_type == 'html' %}html{% else %}txt{% endif %}"
+  delegate_to: localhost
+  become: false
+  tags:
+    - email
+    - template
+
+# Envoyer l'email avec le module mail intégré d'Ansible
+- name: Envoyer le rapport par email
+  mail:
+    host: "{{ cmdb_email.smtp.host }}"
+    port: "{{ cmdb_email.smtp.port }}"
+    username: "{{ cmdb_email.smtp.username }}"
+    password: "{{ cmdb_email.smtp.password }}"
+    secure: "{{ 'always' if cmdb_email.smtp.use_ssl else ('starttls' if cmdb_email.smtp.use_tls else 'try') }}"
+    from: "{{ cmdb_email.from }}"
+    to: "{{ cmdb_email.to | join(',') }}"
+    cc: "{{ cmdb_email.cc | join(',') if cmdb_email.cc else omit }}"
+    subject: "{{ cmdb_email.subject }}"
+    body: "{{ lookup('file', cmdb_report.temp_dir + '/email_body.' + ('html' if cmdb_email.body_type == 'html' else 'txt')) }}"
+    attach: "{{ [cmdb_report_excel_path] if cmdb_email.attach_report else omit }}"
+    subtype: "{{ 'html' if cmdb_email.body_type == 'html' else 'plain' }}"
+  delegate_to: localhost
+  become: false
+  register: email_result
+  tags:
+    - email
+    - send
+
+# Afficher le résultat de l'envoi de l'email
+- name: Afficher le résultat de l'envoi de l'email
+  debug:
+    msg: "Email envoyé avec succès à {{ cmdb_email.to | join(', ') }}"
+  when: email_result is success
+  tags:
+    - email
+    - debug
+
+# Journaliser l'envoi de l'email dans un fichier de log
+- name: Journaliser l'envoi de l'email
+  lineinfile:
+    path: "{{ cmdb_repository.directory }}/email_logs.txt"
+    line: "{{ ansible_date_time.iso8601 }} - Rapport envoyé à {{ cmdb_email.to | join(', ') }}"
+    create: yes
+  delegate_to: "{{ cmdb_manager_host }}"
+  become: false
+  ignore_errors: true
+  when: email_result is success
+  tags:
+    - email
+    - log

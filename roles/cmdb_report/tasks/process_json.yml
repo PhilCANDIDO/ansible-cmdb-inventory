@@ -1,0 +1,57 @@
+---
+# tasks/process_json.yml - Traitement d'un fichier JSON individuel
+
+# Charger et parser le contenu du fichier JSON
+- name: Lire et parser le fichier JSON {{ json_file.path | basename }}
+  slurp:
+    src: "{{ cmdb_report.temp_dir }}/json/{{ json_file.path | basename }}"
+  register: json_content
+  delegate_to: localhost
+  become: false
+  tags:
+    - process
+    - read
+
+# Parser le contenu JSON et extraire les informations nécessaires
+- name: Parser le contenu JSON
+  set_fact:
+    json_data: "{{ json_content['content'] | b64decode | from_json }}"
+  delegate_to: localhost
+  become: false
+  tags:
+    - process
+    - parse
+
+# Ajouter les données traitées à la liste globale
+- name: Ajouter les données au tableau global
+  set_fact:
+    cmdb_data: "{{ cmdb_data + [json_data] }}"
+  delegate_to: localhost
+  become: false
+  tags:
+    - process
+    - add
+
+# Extraire des informations supplémentaires pour faciliter le traitement
+- name: Extraire les statistiques globales
+  set_fact:
+    cmdb_stats: "{{ cmdb_stats | default({}) | combine({
+      'total_servers': (cmdb_stats.total_servers | default(0)) + 1,
+      'os_count': cmdb_stats.os_count | default({}) | combine({
+        json_data.software.os.distribution: (cmdb_stats.os_count[json_data.software.os.distribution] | default(0)) + 1
+      }),
+      'env_count': cmdb_stats.env_count | default({}) | combine({
+        json_data.organizational.environment: (cmdb_stats.env_count[json_data.organizational.environment] | default(0)) + 1
+      }),
+      'virtualization_count': cmdb_stats.virtualization_count | default({}) | combine({
+        json_data.hardware.system.virtualization_type: (cmdb_stats.virtualization_count[json_data.hardware.system.virtualization_type] | default(0)) + 1
+      }),
+      'updates_needed': cmdb_stats.updates_needed | default(0) + (1 if json_data.security.updates_available is number and json_data.security.updates_available > 0 else 0),
+      'critical_servers': cmdb_stats.critical_servers | default(0) + (1 if json_data.organizational.criticality == 'Critique' else 0),
+      'expired_certs': cmdb_stats.expired_certs | default(0) + (json_data.security.certificates.details | selectattr('stdout', 'search', 'notAfter') | selectattr('stdout', 'search', '2024') | list | length)
+    }) }}"
+  delegate_to: localhost
+  become: false
+  tags:
+    - process
+    - stats

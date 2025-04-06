@@ -1,0 +1,16 @@
+{
+  "data_dir": "{{ cmdb_report.temp_dir }}/json",
+  "output_file": "{{ cmdb_report.filename }}",
+  "date_format": "{{ cmdb_report.date_format }}",
+  "sheets": {
+    "summary": {{ cmdb_report.sheets.summary | lower }},
+    "servers": {{ cmdb_report.sheets.servers | lower }},
+    "hardware": {{ cmdb_report.sheets.hardware | lower }},
+    "software": {{ cmdb_report.sheets.software | lower }},
+    "network": {{ cmdb_report.sheets.network | lower }},
+    "security": {{ cmdb_report.sheets.security | lower }},
+    "organizational": {{ cmdb_report.sheets.organizational | lower }},
+    "certificates": {{ cmdb_report.sheets.certificates | lower }},
+    "updates": {{ cmdb_report.sheets.updates | lower }}
+  }
+}

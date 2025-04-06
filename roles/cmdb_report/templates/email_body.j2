@@ -1,0 +1,126 @@
+{% if cmdb_email.body_type == 'html' %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 700px; margin: 0 auto; padding: 20px; }
+        h1 { color: #0066cc; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        h2 { color: #0066cc; font-size: 18px; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { padding: 8px; text-align: left; }
+        th { background-color: #0066cc; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .footer { margin-top: 30px; font-size: 12px; color: #666; border-top: 1px solid #ddd; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Rapport d'inventaire CMDB</h1>
+        
+        <p>Bonjour,</p>
+        
+        <p>Veuillez trouver ci-joint le rapport d'inventaire CMDB généré le {{ ansible_date_time.date }} à {{ ansible_date_time.time }}.</p>
+        
+        {% if cmdb_stats is defined %}
+        <h2>Résumé de l'inventaire</h2>
+        <table>
+            <tr>
+                <th>Métrique</th>
+                <th>Valeur</th>
+            </tr>
+            <tr>
+                <td>Nombre total de serveurs</td>
+                <td>{{ cmdb_stats.total_servers | default(cmdb_data | length) }}</td>
+            </tr>
+            <tr>
+                <td>Serveurs nécessitant des mises à jour</td>
+                <td>{{ cmdb_stats.updates_needed | default(0) }}</td>
+            </tr>
+            <tr>
+                <td>Serveurs critiques</td>
+                <td>{{ cmdb_stats.critical_servers | default(0) }}</td>
+            </tr>
+            {% if cmdb_stats.expired_certs is defined %}
+            <tr>
+                <td>Serveurs avec certificats expirés</td>
+                <td>{{ cmdb_stats.expired_certs }}</td>
+            </tr>
+            {% endif %}
+        </table>
+        {% endif %}
+        
+        <p>Ce rapport contient les onglets suivants :</p>
+        <ul>
+            {% if cmdb_report.sheets.summary %}<li><strong>Résumé</strong> - Aperçu global de l'état du parc</li>{% endif %}
+            {% if cmdb_report.sheets.servers %}<li><strong>Serveurs</strong> - Liste de tous les serveurs inventoriés</li>{% endif %}
+            {% if cmdb_report.sheets.hardware %}<li><strong>Matériel</strong> - Détails sur le matériel de chaque serveur</li>{% endif %}
+            {% if cmdb_report.sheets.software %}<li><strong>Logiciels</strong> - Informations sur les systèmes d'exploitation et logiciels</li>{% endif %}
+            {% if cmdb_report.sheets.network %}<li><strong>Réseau</strong> - Configuration réseau des serveurs</li>{% endif %}
+            {% if cmdb_report.sheets.security %}<li><strong>Sécurité</strong> - Informations de sécurité (mises à jour, utilisateurs, etc.)</li>{% endif %}
+            {% if cmdb_report.sheets.organizational %}<li><strong>Organisation</strong> - Données organisationnelles</li>{% endif %}
+            {% if cmdb_report.sheets.certificates %}<li><strong>Certificats</strong> - Détails sur les certificats SSL/TLS</li>{% endif %}
+            {% if cmdb_report.sheets.updates %}<li><strong>Mises à jour</strong> - Statut des mises à jour par serveur</li>{% endif %}
+        </ul>
+        
+        <p>Pour toute question concernant ce rapport, merci de contacter l'équipe infrastructure.</p>
+        
+        <p>Cordialement,<br>
+        Système d'automatisation CMDB</p>
+        
+        <div class="footer">
+            <p>Ce rapport a été généré automatiquement. Merci de ne pas répondre à cet email.</p>
+            <p>Exécuté depuis : {{ inventory_hostname }}</p>
+        </div>
+    </div>
+</body>
+</html>
+{% else %}
+RAPPORT D'INVENTAIRE CMDB
+=========================
+
+Bonjour,
+
+Veuillez trouver ci-joint le rapport d'inventaire CMDB généré le {{ ansible_date_time.date }} à {{ ansible_date_time.time }}.
+
+{% if cmdb_stats is defined %}
+RÉSUMÉ DE L'INVENTAIRE
+----------------------
+- Nombre total de serveurs : {{ cmdb_stats.total_servers | default(cmdb_data | length) }}
+- Serveurs nécessitant des mises à jour : {{ cmdb_stats.updates_needed | default(0) }}
+- Serveurs critiques : {{ cmdb_stats.critical_servers | default(0) }}
+{% if cmdb_stats.expired_certs is defined %}
+- Serveurs avec certificats expirés : {{ cmdb_stats.expired_certs }}
+{% endif %}
+{% endif %}
+
+Ce rapport contient les onglets suivants :
+{% if cmdb_report.sheets.summary %}
+- Résumé - Aperçu global de l'état du parc{% endif %}
+{% if cmdb_report.sheets.servers %}
+- Serveurs - Liste de tous les serveurs inventoriés{% endif %}
+{% if cmdb_report.sheets.hardware %}
+- Matériel - Détails sur le matériel de chaque serveur{% endif %}
+{% if cmdb_report.sheets.software %}
+- Logiciels - Informations sur les systèmes d'exploitation et logiciels{% endif %}
+{% if cmdb_report.sheets.network %}
+- Réseau - Configuration réseau des serveurs{% endif %}
+{% if cmdb_report.sheets.security %}
+- Sécurité - Informations de sécurité (mises à jour, utilisateurs, etc.){% endif %}
+{% if cmdb_report.sheets.organizational %}
+- Organisation - Données organisationnelles{% endif %}
+{% if cmdb_report.sheets.certificates %}
+- Certificats - Détails sur les certificats SSL/TLS{% endif %}
+{% if cmdb_report.sheets.updates %}
+- Mises à jour - Statut des mises à jour par serveur{% endif %}
+
+Pour toute question concernant ce rapport, merci de contacter l'équipe infrastructure.
+
+Cordialement,
+Système d'automatisation CMDB
+
+--
+Ce rapport a été généré automatiquement. Merci de ne pas répondre à cet email.
+Exécuté depuis : {{ inventory_hostname }}
+{% endif %}

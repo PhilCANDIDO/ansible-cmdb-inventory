@@ -1,0 +1,73 @@
+---
+# defaults file for roles/cmdb_report
+
+# Configuration du repository (reprise du role cmdb_inventory)
+cmdb_repository:
+  # Mode de repository (local, manager)
+  # - local: fichiers stockés sur la machine exécutant le playbook
+  # - manager: utilise un serveur dédié comme repository central
+  mode: "manager"
+  
+  # Groupe de l'inventaire contenant le serveur manager
+  manager_group: "cmdb_repository"
+  
+  # Répertoire où sont stockés les rapports
+  directory: "/opt/cmdb/inventory"
+  
+  # Répertoire de secours si le répertoire principal n'est pas accessible
+  fallback_directory: "/tmp/cmdb_inventory_repository"
+
+# Configuration du rapport Excel
+cmdb_report:
+  # Nom du fichier généré
+  filename: "cmdb_inventory_report_{{ ansible_date_time.date | default(lookup('pipe', 'date +%Y-%m-%d')) }}.xlsx"
+  
+  # Répertoire temporaire pour la génération du rapport
+  temp_dir: "/tmp/cmdb_report_{{ ansible_date_time.epoch | default(lookup('pipe', 'date +%s')) }}"
+  
+  # Limite du nombre de serveurs à inclure (0 = pas de limite)
+  server_limit: 0
+  
+  # Délai maximum en jours pour les rapports (0 = pas de limite)
+  max_age_days: 30
+  
+  # Format de date pour le rapport
+  date_format: "%d/%m/%Y %H:%M:%S"
+
+  # Onglets à inclure dans le rapport
+  sheets:
+    summary: true        # Résumé global
+    servers: true        # Liste des serveurs
+    hardware: true       # Informations matérielles
+    software: true       # Informations logicielles
+    network: true        # Informations réseau
+    security: true       # Informations de sécurité
+    organizational: true # Informations organisationnelles
+    certificates: true   # Détails des certificats
+    updates: true        # État des mises à jour
+
+# Configuration de l'envoi par email
+cmdb_email:
+  # Activer/désactiver l'envoi par email
+  enabled: true
+  
+  # Configuration SMTP
+  smtp:
+    host: "smtp.example.com"
+    port: 25
+    use_tls: false
+    use_ssl: false
+    username: ""
+    password: ""
+  
+  # Informations sur l'email
+  from: "cmdb-report@example.com"
+  to: ["admin@example.com"]
+  cc: []
+  subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date | default(lookup('pipe', 'date +%Y-%m-%d')) }}"
+  
+  # Corps du message
+  body_type: "html"  # plain ou html
+  
+  # Attacher le rapport Excel
+  attach_report: true
