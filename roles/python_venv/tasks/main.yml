@@ -1,0 +1,62 @@
+# roles/python_venv/tasks/main.yml
+---
+# Installation des prérequis pour créer un environnement virtuel
+- name: Installer les paquets nécessaires pour Python venv (Debian/Ubuntu)
+  apt:
+    name: python3-venv
+    state: present
+  become: true
+  when: ansible_os_family == "Debian"
+  ignore_errors: true
+  tags:
+    - python_venv
+    - setup
+
+- name: Installer les paquets nécessaires pour Python venv (RedHat/CentOS)
+  yum:
+    name: python3-devel
+    state: present
+  become: true
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+  tags:
+    - python_venv
+    - setup
+
+# Vérifier si l'environnement virtuel existe déjà
+- name: "Vérifier si l'environnement virtuel {{ python_venv_path }} existe"
+  stat:
+    path: "{{ python_venv_path }}"
+  register: venv_stat
+  tags:
+    - python_venv
+    - setup
+
+# Créer l'environnement virtuel
+- name: Créer l'environnement virtuel Python
+  command: "python3 -m venv {{ python_venv_path }}"
+  args:
+    creates: "{{ python_venv_path }}"
+  when: not venv_stat.stat.exists
+  tags:
+    - python_venv
+    - setup
+
+# Installer/mettre à jour les packages de base
+- name: Installer les packages de base dans l'environnement virtuel
+  command: "{{ python_venv_path }}/bin/pip install --upgrade {{ python_venv_packages | join(' ') }}"
+  register: pip_base_install
+  changed_when: "'Successfully installed' in pip_base_install.stdout"
+  tags:
+    - python_venv
+    - packages
+
+# Installer des packages supplémentaires si spécifiés
+- name: Installer des packages supplémentaires dans l'environnement virtuel
+  command: "{{ python_venv_path }}/bin/pip install --upgrade {{ python_venv_extra_packages | join(' ') }}"
+  register: pip_extra_install
+  changed_when: "'Successfully installed' in pip_extra_install.stdout"
+  when: python_venv_extra_packages is defined and python_venv_extra_packages | length > 0
+  tags:
+    - python_venv
+    - packages

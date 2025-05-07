@@ -1,79 +1,45 @@
 ---
 # Playbook pour générer un rapport Excel à partir des données CMDB
-# Usage: ansible-playbook -i inventory.ini cmdb_report.yml
+# Usage: ansible-playbook -i inventory/dev/inventory.ini cmdb_report.yml --vault-password-file=.vault_pass
 
 - name: Générer et envoyer le rapport CMDB
-  hosts: cmdb_repository
+  hosts: localhost
+  connection: local
   gather_facts: true
+  become: false
   
-  pre_tasks:
-    # Installer les packages nécessaires pour l'environnement virtuel selon la distribution
-    - name: Installer les packages nécessaires pour les environnements virtuels (Debian/Ubuntu)
-      apt:
-        name:
-          - python3-venv
-          - python3-full
-        state: present
-      become: true
-      when: ansible_os_family == "Debian"
-      ignore_errors: true
-      
-    - name: Installer les packages nécessaires pour les environnements virtuels (RedHat/CentOS)
-      yum:
-        name:
-          - python3
-          - python3-devel
-        state: present
-      become: true
-      when: ansible_os_family == "RedHat"
-      ignore_errors: true
-      
-    - name: Créer un répertoire temporaire pour l'environnement virtuel
-      file:
-        path: "/tmp/cmdb_venv"
-        state: directory
-        mode: '0755'
-      become: false
-      
-    - name: Créer un environnement virtuel Python
-      command: "python3 -m venv /tmp/cmdb_venv"
-      args:
-        creates: "/tmp/cmdb_venv"
-      become: false
-      
-    - name: Installer les dépendances Python dans l'environnement virtuel
-      pip:
-        name:
-          - openpyxl>=3.0.0
-          - jmespath>=0.10.0
-        state: present
-        virtualenv: "/tmp/cmdb_venv"
-      become: false
-      register: pip_result
-      until: pip_result is success
-      retries: 3
-      delay: 5
-      
+  vars:
+    # Configuration commune
+    user_home: "{{ ansible_env.HOME }}"
+    report_temp_dir: "{{ user_home }}/.cmdb_report_{{ ansible_date_time.epoch }}"
+  
   roles:
+    - role: python_venv
+      vars:
+        python_venv_path: "{{ user_home }}/.cmdb_venv"
+        python_venv_extra_packages:
+          - openpyxl>=3.0.0  # Nécessaire pour la génération de rapports Excel
+          - jmespath>=0.10.0  # Nécessaire pour les filtres JSON
+      tags:
+        - setup
+        - python
+    
     - role: cmdb_report
       vars:
-        # Configuration spécifique pour utiliser l'environnement virtuel créé
-        cmdb_venv_path: "/tmp/cmdb_venv"
+        cmdb_venv_path: "{{ user_home }}/.cmdb_venv"
         
-        # Utilisation du repository configuré dans le rôle
         cmdb_repository:
-          mode: "manager"
-          manager_group: "cmdb_repository"
-          directory: "/opt/cmdb/inventory"
+          mode: "local"
+          directory: "{{ user_home }}/.cmdb_inventory"
+          fallback_directory: "{{ user_home }}/.cmdb_inventory_fallback"
           
-        # Configuration du rapport
         cmdb_report:
           filename: "cmdb_inventory_report_{{ ansible_date_time.date }}.xlsx"
-          max_age_days: 7  # Ne considérer que les données de moins d'une semaine
+          temp_dir: "{{ report_temp_dir }}"
+          max_age_days: 7
           
-        # Configuration de l'email
         cmdb_email:
-          enabled: true
+          enabled: false
           smtp:
             host: "{{ vault_smtp_host | default('smtp.example.com') }}"
             port: "{{ vault_smtp_port | default(25) }}"
@@ -86,24 +52,5 @@
           subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date }}"
           body_type: "html"
           attach_report: true
-          
-  post_tasks:
-    - name: Afficher le chemin du rapport généré
-      debug:
-        msg: "Rapport généré avec succès: {{ cmdb_report_excel_path | default('N/A') }}"
-      when: cmdb_report_excel_path is defined
-      
-    - name: Nettoyer les anciens rapports (plus de 30 jours)
-      find:
-        paths: "{{ cmdb_repository.directory }}/reports"
-        patterns: "cmdb_inventory_report_*.xlsx"
-        age: 30d
-        recurse: no
-      register: old_reports
-      
-    - name: Supprimer les anciens rapports
-      file:
-        path: "{{ item.path }}"
-        state: absent
-      loop: "{{ old_reports.files }}"
-      when: old_reports.matched > 0
+      tags:
+        - report
