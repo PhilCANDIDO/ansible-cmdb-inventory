@@ -31,21 +31,24 @@
       tags:
         - always
         - debug
-  
-  roles:
-    - role: python_venv
-      vars:
-        python_venv_path: "{{ report_temp_dir }}/venv"
-        python_venv_extra_packages:
-          - openpyxl>=3.0.0  # Nécessaire pour la génération de rapports Excel
-          - jmespath>=0.10.0  # Nécessaire pour les filtres JSON
+    
+    # Installer les dépendances Python nécessaires (avec become pour les permissions)
+    - name: Installer les dépendances Python nécessaires
+      pip:
+        name:
+          - openpyxl>=3.0.0
+          - jmespath>=0.10.0
+        state: present
+      become: true
+      ignore_errors: true
       tags:
         - setup
-        - python
-    
+        - dependencies
+  
+  roles:
     - role: cmdb_report
       vars:
-        cmdb_venv_path: "{{ report_temp_dir }}/venv"
+        # Pas besoin de cmdb_venv_path
         
         # Utiliser les informations détectées automatiquement
         cmdb_repository:
@@ -59,21 +62,17 @@
           temp_dir: "{{ report_temp_dir }}"
           max_age_days: 30  # Augmenté pour inclure plus de données historiques
           server_limit: 10000  # Augmenté pour gérer un grand parc de serveurs
-          
-        cmdb_email:
-          enabled: "{{ vault_email_enabled | default(false) }}"
-          smtp:
-            host: "{{ vault_smtp_host | default('smtp.example.com') }}"
-            port: "{{ vault_smtp_port | default(25) }}"
-            use_tls: "{{ vault_smtp_use_tls | default(false) }}"
-            use_ssl: "{{ vault_smtp_use_ssl | default(false) }}"
-            username: "{{ vault_smtp_username | default('') }}"
-            password: "{{ vault_smtp_password | default('') }}"
-          from: "{{ vault_smtp_from | default('cmdb-report@example.com') }}"
-          to: "{{ vault_smtp_recipients | default(['admin@example.com']) }}"
-          subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date }}"
-          body_type: "html"
-          attach_report: true
+          date_format: "%d/%m/%Y %H:%M:%S"
+          sheets:
+            summary: true
+            servers: true
+            hardware: true
+            software: true
+            network: true
+            security: true
+            organizational: true
+            certificates: true
+            updates: true
       tags:
         - report
         
