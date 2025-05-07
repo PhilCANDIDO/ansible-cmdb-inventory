@@ -42,9 +42,46 @@
     - python_venv
     - setup
 
+# Installation du package pip au niveau système
+- name: Installer pip au niveau système (Debian/Ubuntu)
+  apt:
+    name: python3-pip
+    state: present
+  become: true
+  when: ansible_os_family == "Debian"
+  ignore_errors: true
+  tags:
+    - python_venv
+    - setup
+    - pip
+
+- name: Installer pip au niveau système (RedHat/CentOS)
+  yum:
+    name: python3-pip
+    state: present
+  become: true
+  when: ansible_os_family == "RedHat"
+  ignore_errors: true
+  tags:
+    - python_venv
+    - setup
+    - pip
+
+- name: Installer pip au niveau système (SUSE)
+  zypper:
+    name: python3-pip
+    state: present
+  become: true
+  when: ansible_os_family == "Suse"
+  ignore_errors: true
+  tags:
+    - python_venv
+    - setup
+    - pip
+
 # Installer/mettre à jour les packages de base
 - name: Installer les packages de base dans l'environnement virtuel
-  command: "{{ python_venv_path }}/bin/pip install --upgrade {{ python_venv_packages | join(' ') }}"
+  command: "/usr/bin/pip3 install --upgrade {{ python_venv_packages | join(' ') }}"
   register: pip_base_install
   changed_when: "'Successfully installed' in pip_base_install.stdout"
   tags:
@@ -53,7 +90,7 @@
 
 # Installer des packages supplémentaires si spécifiés
 - name: Installer des packages supplémentaires dans l'environnement virtuel
-  command: "{{ python_venv_path }}/bin/pip install --upgrade {{ python_venv_extra_packages | join(' ') }}"
+  command: "/usr/bin/pip3 install --upgrade {{ python_venv_extra_packages | join(' ') }}"
   register: pip_extra_install
   changed_when: "'Successfully installed' in pip_extra_install.stdout"
   when: python_venv_extra_packages is defined and python_venv_extra_packages | length > 0
