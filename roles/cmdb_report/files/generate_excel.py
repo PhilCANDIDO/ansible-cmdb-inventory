@@ -1,11 +1,35 @@
 #!/usr/bin/env python3
-import json
-import os
 import sys
+import os
+import json
 from datetime import datetime
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
+
+# Auto-installation des dépendances requises
+try:
+    import openpyxl
+except ImportError:
+    print("Le module openpyxl n'est pas installé. Tentative d'installation...")
+    import subprocess
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
+        import openpyxl
+        print("Installation de openpyxl réussie!")
+    except Exception as e:
+        print(f"Échec de l'installation de openpyxl: {e}")
+        sys.exit(1)
+
+try:
+    import jmespath
+except ImportError:
+    print("Le module jmespath n'est pas installé. Tentative d'installation...")
+    import subprocess
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "jmespath"])
+        import jmespath
+        print("Installation de jmespath réussie!")
+    except Exception as e:
+        print(f"Échec de l'installation de jmespath: {e}")
+        sys.exit(1)
 
 def load_config():
     config_path = sys.argv[1] if len(sys.argv) > 1 else 'report_config.json'

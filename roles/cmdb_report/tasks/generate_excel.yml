@@ -24,20 +24,6 @@
     - generate
     - config
 
-# Installer les dépendances Python requises localement
-- name: Installer les dépendances Python requises localement
-  pip:
-    name:
-      - openpyxl
-      - jmespath
-    state: present
-    extra_args: "--user"  # Installe dans le répertoire utilisateur pour éviter les problèmes de permissions
-  delegate_to: localhost
-  become: false
-  tags:
-    - generate
-    - dependencies
-
 # Copier le script Python depuis les files du rôle
 - name: Copier le script Python pour la génération du rapport Excel
   copy:
@@ -50,7 +36,20 @@
     - generate
     - script
 
-# Exécuter le script Python pour générer le rapport Excel en utilisant l'environnement virtuel
+# Installer les dépendances Python requises sans l'option --user
+- name: Installer les dépendances Python requises
+  pip:
+    name:
+      - openpyxl
+      - jmespath
+    state: present
+  delegate_to: localhost
+  become: true  # Utilisez sudo pour installer les packages
+  tags:
+    - generate
+    - dependencies
+
+# Exécuter le script Python pour générer le rapport Excel
 - name: Générer le rapport Excel
   command:
     cmd: "python3 {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
