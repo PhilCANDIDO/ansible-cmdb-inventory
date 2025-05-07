@@ -59,124 +59,7 @@
     - validate
     - dependencies
 
-# Créer un environnement virtuel pour l'exécution du script
-- name: Créer un environnement virtuel Python
-  command: "python3 -m venv {{ cmdb_report.temp_dir }}/venv"
-  args:
-    creates: "{{ cmdb_report.temp_dir }}/venv"
-  delegate_to: localhost
-  become: false
-  register: venv_creation
-  tags:
-    - validate
-    - dependencies
-
-# Mettre à jour pip dans l'environnement virtuel
-- name: Mettre à jour pip dans l'environnement virtuel
-  pip:
-    name: pip
-    state: latest
-    virtualenv: "{{ cmdb_report.temp_dir }}/venv"
-  delegate_to: localhost
-  become: false
-  register: pip_update
-  until: pip_update is success
-  retries: 3
-  delay: 5
-  tags:
-    - validate
-    - dependencies
-
-# Installer les dépendances Python dans l'environnement virtuel
-- name: Installer les dépendances Python dans l'environnement virtuel
-  pip:
-    name:
-      - openpyxl>=3.0.0
-      - jmespath>=0.10.0
-    state: present
-    virtualenv: "{{ cmdb_report.temp_dir }}/venv"
-  delegate_to: localhost
-  become: false
-  register: pip_install
-  until: pip_install is success
-  retries: 3
-  delay: 5
-  tags:
-    - validate
-    - dependencies
-
-# Vérifier que les modules sont correctement installés
-- name: Vérifier l'installation des modules dans l'environnement virtuel
-  command: "{{ cmdb_report.temp_dir }}/venv/bin/python3 -c 'import {{ item }}'"
-  with_items:
-    - openpyxl
-    - jmespath
-    - json
-  delegate_to: localhost
-  register: module_check
-  failed_when: false
-  changed_when: false
-  ignore_errors: true
-  tags:
-    - validate
-    - dependencies
-
-# Afficher un avertissement si certains modules ne sont pas disponibles
-- name: Afficher un avertissement pour les modules manquants
-  debug:
-    msg: "Attention: le module {{ item.item }} n'est pas disponible. La génération du rapport pourrait échouer."
-  loop: "{{ module_check.results }}"
-  when: item.rc != 0
-  tags:
-    - validate
-    - dependencies
-
-# Vérifier l'existence du répertoire repository
-- name: Vérifier l'accès au répertoire repository
-  stat:
-    path: "{{ cmdb_repository.directory }}/reports"
-  register: repository_dir_stat
-  # Utiliser localhost comme fallback si cmdb_manager_host n'est pas défini
-  delegate_to: "{{ cmdb_manager_host | default('localhost') }}"
-  become: false
-  ignore_errors: true
-  tags:
-    - validate
-    - repository
-
-- name: Créer les répertoires repository si nécessaire (local)
-  file:
-    path: "{{ item }}"
-    state: directory
-    mode: '0755'
-  with_items:
-    - "{{ cmdb_repository.directory }}"
-    - "{{ cmdb_repository.directory }}/reports"
-    - "{{ cmdb_repository.directory }}/diagnostics"
-  when: 
-    - not repository_dir_stat.stat.exists | default(false)
-    - cmdb_repository_mode == 'local'
-  delegate_to: localhost
-  become: false
-  ignore_errors: true
-  tags:
-    - validate
-    - repository
-
-- name: Échec si le répertoire repository n'existe pas et n'a pas pu être créé
-  fail:
-    msg: >-
-      Le répertoire repository '{{ cmdb_repository.directory }}/reports' n'existe pas sur 
-      {{ cmdb_manager_host | default('localhost') }} et n'a pas pu être créé automatiquement.
-      Veuillez le créer manuellement ou utiliser un répertoire différent.
-  when: 
-    - not repository_dir_stat.stat.exists | default(false)
-    - cmdb_repository_mode != 'local'
-  tags:
-    - validate
-    - repository
-
-# Vérifier la possibilité de créer le répertoire temporaire
+# Créer le répertoire temporaire pour le traitement
 - name: Créer le répertoire temporaire pour le traitement
   file:
     path: "{{ cmdb_report.temp_dir }}"
@@ -196,6 +79,169 @@
   tags:
     - validate
     - tempdir
+
+# Créer des sous-répertoires dans le répertoire temporaire
+- name: Créer des sous-répertoires dans le répertoire temporaire
+  file:
+    path: "{{ cmdb_report.temp_dir }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - 'json'
+    - 'python'
+  delegate_to: localhost
+  become: false
+  tags:
+    - validate
+    - tempdir
+
+# Vérifier la connectivité avec le serveur repository
+- name: Vérifier la connectivité avec le serveur repository (ping)
+  ping:
+  delegate_to: "{{ cmdb_manager_host }}"
+  register: repository_ping
+  ignore_errors: true
+  when: cmdb_repository_mode == 'manager'
+  tags:
+    - validate
+    - repository
+    - connectivity
+
+# Afficher un message d'avertissement si le serveur repository n'est pas accessible
+- name: Afficher un avertissement si le serveur repository n'est pas accessible
+  debug:
+    msg: >-
+      AVERTISSEMENT: Le serveur repository '{{ cmdb_manager_host }}' n'est pas accessible.
+      Le mode repository sera automatiquement changé en mode 'local'.
+  when: 
+    - cmdb_repository_mode == 'manager'
+    - repository_ping is defined and repository_ping is failed
+  tags:
+    - validate
+    - repository
+    - connectivity
+
+# Redéfinir le mode repository si le serveur n'est pas accessible
+- name: Redéfinir le mode repository en mode local si le serveur n'est pas accessible
+  set_fact:
+    cmdb_repository_mode: "local"
+    cmdb_manager_host: "localhost"
+  when: 
+    - cmdb_repository_mode == 'manager'
+    - repository_ping is defined and repository_ping is failed
+  tags:
+    - validate
+    - repository
+    - connectivity
+
+# Vérifier l'existence du répertoire repository sur le serveur
+- name: Vérifier l'accès au répertoire repository
+  stat:
+    path: "{{ cmdb_repository.directory }}/reports"
+  register: repository_dir_stat
+  delegate_to: "{{ cmdb_manager_host }}"
+  become: false
+  ignore_errors: true
+  tags:
+    - validate
+    - repository
+
+# Créer les répertoires repository si nécessaire (mode local uniquement)
+- name: Créer les répertoires repository si nécessaire (local)
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - "{{ cmdb_repository.directory }}"
+    - "{{ cmdb_repository.directory }}/reports"
+    - "{{ cmdb_repository.directory }}/diagnostics"
+  when: 
+    - not repository_dir_stat.stat.exists | default(false)
+    - cmdb_repository_mode == 'local'
+  delegate_to: localhost
+  become: false
+  ignore_errors: true
+  tags:
+    - validate
+    - repository
+
+# Tester l'accès en écriture au répertoire repository
+- name: Tester l'accès en écriture au répertoire repository
+  copy:
+    content: "Test d'écriture pour le rapport CMDB - {{ ansible_date_time.iso8601 }}"
+    dest: "{{ cmdb_repository.directory }}/reports/write_test.txt"
+  delegate_to: "{{ cmdb_manager_host }}"
+  become: false
+  register: write_test
+  ignore_errors: true
+  tags:
+    - validate
+    - repository
+    - write_test
+
+# Supprimer le fichier de test
+- name: Supprimer le fichier de test
+  file:
+    path: "{{ cmdb_repository.directory }}/reports/write_test.txt"
+    state: absent
+  delegate_to: "{{ cmdb_manager_host }}"
+  become: false
+  when: write_test is success
+  ignore_errors: true
+  tags:
+    - validate
+    - repository
+    - write_test
+
+# Afficher un message d'erreur si l'accès en écriture échoue
+- name: Afficher un message d'erreur si l'accès en écriture échoue
+  debug:
+    msg: >-
+      ERREUR: Impossible d'écrire dans le répertoire repository 
+      '{{ cmdb_repository.directory }}/reports' sur le serveur '{{ cmdb_manager_host }}'.
+      Vérifiez les permissions ou utilisez un autre répertoire.
+  when: write_test is failed
+  tags:
+    - validate
+    - repository
+    - write_test
+
+# Échec si le répertoire repository n'est pas accessible et si le mode est manager
+- name: Échec si le répertoire repository n'est pas accessible (mode manager)
+  fail:
+    msg: >-
+      Impossible d'accéder au répertoire repository '{{ cmdb_repository.directory }}/reports' 
+      sur le serveur '{{ cmdb_manager_host }}'. Vérifiez que le répertoire existe 
+      et que les permissions sont correctes.
+  when: 
+    - not repository_dir_stat.stat.exists | default(false)
+    - cmdb_repository_mode == 'manager'
+    - write_test is failed
+  tags:
+    - validate
+    - repository
+
+# Utiliser le répertoire de secours si le répertoire principal n'est pas accessible
+- name: Utiliser le répertoire de secours si le répertoire principal n'est pas accessible
+  set_fact:
+    cmdb_repository_actual_dir: "{{ cmdb_repository.fallback_directory }}"
+  when: 
+    - not repository_dir_stat.stat.exists | default(false) or write_test is failed
+    - cmdb_repository_mode == 'local'
+  tags:
+    - validate
+    - repository
+
+# Définir le répertoire principal si accessible
+- name: Définir le répertoire principal si accessible
+  set_fact:
+    cmdb_repository_actual_dir: "{{ cmdb_repository.directory }}"
+  when: 
+    - repository_dir_stat.stat.exists | default(false) and (write_test is success or write_test is skipped)
+  tags:
+    - validate
+    - repository
 
 # Si envoi par email activé, vérifier la configuration
 - name: Vérifier la configuration email

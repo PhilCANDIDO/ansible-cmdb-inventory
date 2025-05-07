@@ -12,11 +12,31 @@
     # Configuration commune
     user_home: "{{ ansible_env.HOME }}"
     report_temp_dir: "{{ user_home }}/.cmdb_report_{{ ansible_date_time.epoch }}"
+    
+    # Détecter le serveur de dépôt depuis l'inventaire
+    cmdb_repo_server: "{{ groups['cmdb_repository'][0] if (groups['cmdb_repository'] is defined) and (groups['cmdb_repository']|length > 0) else 'localhost' }}"
+    
+    # Définir le mode de repository (manager si un serveur est spécifié, local sinon)
+    cmdb_repo_mode: "{{ 'manager' if (groups['cmdb_repository'] is defined) and (groups['cmdb_repository']|length > 0) and (cmdb_repo_server != 'localhost') else 'local' }}"
+    
+    # Chemin du dépôt d'inventaire, standard pour tous les serveurs
+    cmdb_repo_dir: "/opt/cmdb/inventory"
+  
+  pre_tasks:
+    - name: Afficher les informations de configuration du repository
+      debug:
+        msg: 
+          - "Mode repository: {{ cmdb_repo_mode }}"
+          - "Serveur repository: {{ cmdb_repo_server }}"
+          - "Répertoire repository: {{ cmdb_repo_dir }}"
+      tags:
+        - always
+        - debug
   
   roles:
     - role: python_venv
       vars:
-        python_venv_path: "{{ user_home }}/.cmdb_venv"
+        python_venv_path: "{{ report_temp_dir }}/venv"
         python_venv_extra_packages:
           - openpyxl>=3.0.0  # Nécessaire pour la génération de rapports Excel
           - jmespath>=0.10.0  # Nécessaire pour les filtres JSON
@@ -26,20 +46,23 @@
     
     - role: cmdb_report
       vars:
-        cmdb_venv_path: "{{ user_home }}/.cmdb_venv"
+        cmdb_venv_path: "{{ report_temp_dir }}/venv"
         
+        # Utiliser les informations détectées automatiquement
         cmdb_repository:
-          mode: "local"
-          directory: "{{ user_home }}/.cmdb_inventory"
-          fallback_directory: "{{ user_home }}/.cmdb_inventory_fallback"
+          mode: "{{ cmdb_repo_mode }}"
+          manager_group: "cmdb_repository"
+          directory: "{{ cmdb_repo_dir }}"
+          fallback_directory: "/tmp/cmdb_inventory_repository"
           
         cmdb_report:
           filename: "cmdb_inventory_report_{{ ansible_date_time.date }}.xlsx"
           temp_dir: "{{ report_temp_dir }}"
-          max_age_days: 7
+          max_age_days: 30  # Augmenté pour inclure plus de données historiques
+          server_limit: 10000  # Augmenté pour gérer un grand parc de serveurs
           
         cmdb_email:
-          enabled: false
+          enabled: "{{ vault_email_enabled | default(false) }}"
           smtp:
             host: "{{ vault_smtp_host | default('smtp.example.com') }}"
             port: "{{ vault_smtp_port | default(25) }}"
@@ -54,3 +77,30 @@
           attach_report: true
       tags:
         - report
+        
+  post_tasks:
+    - name: Copier le rapport Excel sur le serveur repository
+      copy:
+        src: "{{ report_temp_dir }}/{{ cmdb_report.filename }}"
+        dest: "{{ cmdb_repo_dir }}/reports/"
+      delegate_to: "{{ cmdb_repo_server }}"
+      ignore_errors: true
+      when: 
+        - cmdb_repo_server != 'localhost'
+        - cmdb_repo_mode == 'manager'
+      tags:
+        - always
+        - copy
+        
+    - name: Afficher l'emplacement du rapport généré
+      debug:
+        msg: >-
+          Rapport Excel généré avec succès!
+          {% if cmdb_repo_mode == 'local' or cmdb_repo_server == 'localhost' %}
+          Emplacement: {{ report_temp_dir }}/{{ cmdb_report.filename }}
+          {% else %}
+          Copié sur le serveur repository: {{ cmdb_repo_server }}:{{ cmdb_repo_dir }}/reports/{{ cmdb_report.filename }}
+          {% endif %}
+      tags:
+        - always
+        - summary

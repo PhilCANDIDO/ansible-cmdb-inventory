@@ -3,8 +3,12 @@
 # Installation des prérequis pour créer un environnement virtuel
 - name: Installer les paquets nécessaires pour Python venv (Debian/Ubuntu)
   apt:
-    name: python3-venv
+    name:
+      - python3-venv
+      - python3-pip
+      - python3-full
     state: present
+    update_cache: yes
   become: true
   when: ansible_os_family == "Debian"
   ignore_errors: true
@@ -14,10 +18,27 @@
 
 - name: Installer les paquets nécessaires pour Python venv (RedHat/CentOS)
   yum:
-    name: python3-devel
+    name:
+      - python3
+      - python3-devel
+      - python3-pip
     state: present
   become: true
   when: ansible_os_family == "RedHat"
+  ignore_errors: true
+  tags:
+    - python_venv
+    - setup
+
+- name: Installer les paquets nécessaires pour Python venv (SUSE)
+  zypper:
+    name:
+      - python3
+      - python3-devel
+      - python3-pip
+    state: present
+  become: true
+  when: ansible_os_family == "Suse"
   ignore_errors: true
   tags:
     - python_venv
@@ -38,55 +59,102 @@
   args:
     creates: "{{ python_venv_path }}"
   when: not venv_stat.stat.exists
+  register: venv_creation
   tags:
     - python_venv
     - setup
 
-# Vérifier si pip3 existe dans l'environnement virtuel
-- name: Vérifier si pip3 existe dans l'environnement virtuel
+# Vérifier que l'environnement virtuel a été créé correctement
+- name: Vérifier que l'environnement virtuel a été créé correctement
   stat:
-    path: "{{ python_venv_path }}/bin/pip3"
-  register: pip3_stat
+    path: "{{ python_venv_path }}/bin/python"
+  register: venv_python_stat
+  failed_when: not venv_python_stat.stat.exists and venv_creation is success
   tags:
     - python_venv
     - setup
 
-# Créer un lien symbolique pour pip3 si nécessaire
-- name: Créer un lien symbolique de pip vers pip3 si pip3 n'existe pas
-  file:
-    src: "{{ python_venv_path }}/bin/pip"
-    dest: "{{ python_venv_path }}/bin/pip3"
-    state: link
-  when: not pip3_stat.stat.exists and venv_stat.stat.exists
-  tags:
-    - python_venv
-    - setup
-
-# Mettre à jour pip3 dans l'environnement virtuel
-- name: Mettre à jour pip3 dans l'environnement virtuel
-  command: "{{ python_venv_path }}/bin/pip3 install --upgrade pip"
+# Mettre à jour pip dans l'environnement virtuel
+- name: Mettre à jour pip dans l'environnement virtuel
+  pip:
+    name: pip
+    state: latest
+    virtualenv: "{{ python_venv_path }}"
   register: pip_upgrade
-  changed_when: "'Successfully installed' in pip_upgrade.stdout"
-  when: venv_stat.stat.exists
+  until: pip_upgrade is success
+  retries: 3
+  delay: 5
+  when: venv_python_stat.stat.exists
   tags:
     - python_venv
     - setup
 
 # Installer/mettre à jour les packages de base
 - name: Installer les packages de base dans l'environnement virtuel
-  command: "{{ python_venv_path }}/bin/pip3 install --upgrade {{ python_venv_packages | join(' ') }}"
+  pip:
+    name: "{{ python_venv_packages }}"
+    state: latest
+    virtualenv: "{{ python_venv_path }}"
   register: pip_base_install
-  changed_when: "'Successfully installed' in pip_base_install.stdout"
+  until: pip_base_install is success
+  retries: 3
+  delay: 5
+  when: venv_python_stat.stat.exists
   tags:
     - python_venv
     - packages
 
 # Installer des packages supplémentaires si spécifiés
 - name: Installer des packages supplémentaires dans l'environnement virtuel
-  command: "{{ python_venv_path }}/bin/pip3 install --upgrade {{ python_venv_extra_packages | join(' ') }}"
+  pip:
+    name: "{{ python_venv_extra_packages }}"
+    state: latest
+    virtualenv: "{{ python_venv_path }}"
   register: pip_extra_install
-  changed_when: "'Successfully installed' in pip_extra_install.stdout"
-  when: python_venv_extra_packages is defined and python_venv_extra_packages | length > 0
+  until: pip_extra_install is success
+  retries: 3
+  delay: 5
+  when: 
+    - venv_python_stat.stat.exists
+    - python_venv_extra_packages is defined and python_venv_extra_packages | length > 0
   tags:
     - python_venv
     - packages
+
+# Vérifier les modules installés
+- name: Vérifier l'installation des modules dans l'environnement virtuel
+  command: "{{ python_venv_path }}/bin/python -c 'import {{ item }}'"
+  loop: 
+    - setuptools
+    - pip
+    - wheel
+    - "{{ python_venv_extra_packages | map('regex_replace', '^([^>=<]+).*$', '\\1') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: module_check
+  failed_when: false
+  changed_when: false
+  ignore_errors: true
+  when: venv_python_stat.stat.exists
+  tags:
+    - python_venv
+    - verify
+
+# Afficher des informations sur les modules installés
+- name: Afficher des informations sur les modules installés
+  debug:
+    msg: "{{ item.item }} : {{ 'OK' if item.rc == 0 else 'ÉCHEC' }}"
+  loop: "{{ module_check.results | default([]) }}"
+  when: venv_python_stat.stat.exists
+  tags:
+    - python_venv
+    - verify
+
+# Afficher un message de succès
+- name: Afficher un message de succès
+  debug:
+    msg: "Environnement virtuel Python créé avec succès: {{ python_venv_path }}"
+  when: venv_python_stat.stat.exists
+  tags:
+    - python_venv
+    - summary

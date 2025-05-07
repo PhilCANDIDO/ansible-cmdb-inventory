@@ -4,7 +4,7 @@
 # Rechercher tous les fichiers JSON dans le répertoire repository
 - name: Rechercher les fichiers d'inventaire JSON
   find:
-    paths: "{{ cmdb_repository.directory }}/reports"
+    paths: "{{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports"
     patterns: "*_cmdb_inventory.json"
     recurse: no
   register: json_files
@@ -16,10 +16,21 @@
 
 - name: Afficher le nombre de fichiers JSON trouvés
   debug:
-    msg: "{{ json_files.files | length }} fichiers JSON d'inventaire trouvés"
+    msg: "{{ json_files.files | length }} fichiers JSON d'inventaire trouvés dans {{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports"
   tags:
     - collect
     - debug
+
+# Gérer le cas où aucun fichier JSON n'est trouvé
+- name: Vérifier si des fichiers ont été trouvés
+  fail:
+    msg: >-
+      Aucun fichier JSON d'inventaire trouvé dans {{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports
+      Assurez-vous que le playbook cmdb_inventory_with_repository.yml a été exécuté au préalable.
+  when: json_files.files is defined and json_files.files | length == 0
+  tags:
+    - collect
+    - check
 
 # Filtrer les fichiers selon leur date de modification si nécessaire
 - name: Filtrer les fichiers par date si requis
@@ -35,37 +46,46 @@
     - collect
     - filter
 
-- name: Afficher le nombre de fichiers JSON après filtrage
+- name: Afficher le nombre de fichiers JSON après filtrage par date
   debug:
-    msg: "{{ filtered_files | length }} fichiers JSON d'inventaire retenus après filtrage par date"
+    msg: "{{ filtered_files | length }} fichiers JSON d'inventaire retenus après filtrage par date (max_age_days: {{ cmdb_report.max_age_days }})"
   when: filtered_files is defined
   tags:
     - collect
     - debug
 
+# Trier les fichiers par date de modification (du plus récent au plus ancien)
+- name: Trier les fichiers par date de modification
+  set_fact:
+    sorted_files: "{{ filtered_files | sort(attribute='mtime', reverse=true) }}"
+  when: filtered_files is defined and filtered_files | length > 0
+  tags:
+    - collect
+    - sort
+
 # Limiter le nombre de fichiers si nécessaire
 - name: Limiter le nombre de fichiers si requis
   set_fact:
     cmdb_files: >-
-      {% if cmdb_report.server_limit > 0 and filtered_files | length > cmdb_report.server_limit | int %}
-      {{ filtered_files[:cmdb_report.server_limit | int] }}
+      {% if cmdb_report.server_limit > 0 and sorted_files | length > cmdb_report.server_limit | int %}
+      {{ sorted_files[:cmdb_report.server_limit | int] }}
       {% else %}
-      {{ filtered_files }}
+      {{ sorted_files }}
       {% endif %}
-  when: filtered_files is defined and filtered_files | length > 0
+  when: sorted_files is defined and sorted_files | length > 0
   tags:
     - collect
     - limit
 
 - name: Afficher le nombre de fichiers JSON finaux
   debug:
-    msg: "{{ cmdb_files | length }} fichiers JSON d'inventaire finalement retenus"
+    msg: "{{ cmdb_files | length }} fichiers JSON d'inventaire finalement retenus (server_limit: {{ cmdb_report.server_limit }})"
   when: cmdb_files is defined
   tags:
     - collect
     - debug
 
-# Copier les fichiers JSON vers le répertoire temporaire pour traitement
+# Créer le répertoire pour les fichiers JSON
 - name: Créer le répertoire pour les fichiers JSON
   file:
     path: "{{ cmdb_report.temp_dir }}/json"
@@ -76,8 +96,9 @@
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:
     - collect
-    - temp
+    - setup
 
+# Copier les fichiers JSON vers le répertoire temporaire
 - name: Copier les fichiers JSON vers le répertoire temporaire
   fetch:
     src: "{{ item.path }}"
@@ -94,10 +115,42 @@
     - collect
     - copy
 
-# Charger les données JSON
-- name: Lire et analyser les données JSON
+# Afficher des informations sur les fichiers copiés
+- name: Afficher des informations sur les fichiers copiés
+  debug:
+    msg: "Fichiers JSON copiés dans {{ cmdb_report.temp_dir }}/json/"
+  when: json_copy_result is success
+  tags:
+    - collect
+    - debug
+
+# Vérifier que tous les fichiers ont été correctement copiés
+- name: Vérifier les fichiers copiés
+  find:
+    paths: "{{ cmdb_report.temp_dir }}/json"
+    patterns: "*.json"
+  register: copied_files
+  delegate_to: localhost
+  become: false
+  when: cmdb_files is defined and cmdb_files | length > 0
+  tags:
+    - collect
+    - verify
+
+# Afficher le nombre de fichiers correctement copiés
+- name: Afficher le nombre de fichiers correctement copiés
+  debug:
+    msg: "{{ copied_files.files | length }} fichiers JSON ont été correctement copiés"
+  when: copied_files is defined
+  tags:
+    - collect
+    - verify
+
+# Initialiser la liste des données CMDB
+- name: Initialiser la liste des données CMDB
   set_fact:
     cmdb_data: []
+    cmdb_stats: {}
   delegate_to: localhost
   become: false
   when: cmdb_files is defined and cmdb_files | length > 0
@@ -105,6 +158,7 @@
     - collect
     - parse
 
+# Ajouter les données de chaque fichier JSON
 - name: Ajouter les données de chaque fichier JSON
   include_tasks: process_json.yml
   loop: "{{ cmdb_files }}"
@@ -115,3 +169,14 @@
   tags:
     - collect
     - parse
+
+# Afficher les statistiques après traitement
+- name: Afficher les statistiques après traitement
+  debug:
+    msg: 
+      - "Nombre total de serveurs traités: {{ cmdb_data | length }}"
+      - "Distributions détectées: {{ cmdb_stats.os_count | default({}) | dict2items | map(attribute='key') | list | join(', ') }}"
+  when: cmdb_data is defined and cmdb_data | length > 0
+  tags:
+    - collect
+    - stats
