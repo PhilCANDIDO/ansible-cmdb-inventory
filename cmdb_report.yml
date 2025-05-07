@@ -9,9 +9,8 @@
   become: false
   
   vars:
-    # Configuration commune
-    user_home: "{{ ansible_env.HOME }}"
-    report_temp_dir: "{{ user_home }}/.cmdb_report_{{ ansible_date_time.epoch }}"
+    # Configuration commune - UTILISER /tmp au lieu du répertoire home pour éviter les problèmes de permissions
+    report_temp_dir: "/tmp/cmdb_report_{{ ansible_date_time.epoch }}"
     
     # Détecter le serveur de dépôt depuis l'inventaire
     cmdb_repo_server: "{{ groups['cmdb_repository'][0] if (groups['cmdb_repository'] is defined) and (groups['cmdb_repository']|length > 0) else 'localhost' }}"

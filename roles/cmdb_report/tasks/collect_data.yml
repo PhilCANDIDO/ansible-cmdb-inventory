@@ -32,47 +32,23 @@
     - collect
     - check
 
-# Filtrer les fichiers selon leur date de modification si nécessaire
-- name: Filtrer les fichiers par date si requis
+# Utiliser directement les fichiers trouvés sans filtrage par date pour éviter les problèmes
+- name: Conserver tous les fichiers JSON trouvés
   set_fact:
-    filtered_files: >-
-      {% if cmdb_report.max_age_days > 0 %}
-      {{ json_files.files | selectattr('mtime', '>=', (ansible_date_time.epoch | int - (cmdb_report.max_age_days | int * 86400)) | string) | list }}
-      {% else %}
-      {{ json_files.files }}
-      {% endif %}
+    cmdb_files: "{{ json_files.files }}"
   when: json_files.files is defined and json_files.files | length > 0
   tags:
     - collect
     - filter
 
-- name: Afficher le nombre de fichiers JSON après filtrage par date
-  debug:
-    msg: "{{ filtered_files | length }} fichiers JSON d'inventaire retenus après filtrage par date (max_age_days: {{ cmdb_report.max_age_days }})"
-  when: filtered_files is defined
-  tags:
-    - collect
-    - debug
-
-# Trier les fichiers par date de modification (du plus récent au plus ancien)
-- name: Trier les fichiers par date de modification
-  set_fact:
-    sorted_files: "{{ filtered_files | sort(attribute='mtime', reverse=true) }}"
-  when: filtered_files is defined and filtered_files | length > 0
-  tags:
-    - collect
-    - sort
-
 # Limiter le nombre de fichiers si nécessaire
 - name: Limiter le nombre de fichiers si requis
   set_fact:
-    cmdb_files: >-
-      {% if cmdb_report.server_limit > 0 and sorted_files | length > cmdb_report.server_limit | int %}
-      {{ sorted_files[:cmdb_report.server_limit | int] }}
-      {% else %}
-      {{ sorted_files }}
-      {% endif %}
-  when: sorted_files is defined and sorted_files | length > 0
+    cmdb_files: "{{ cmdb_files[:cmdb_report.server_limit | int] }}"
+  when: 
+    - cmdb_files is defined and cmdb_files | length > 0
+    - cmdb_report.server_limit | int > 0
+    - cmdb_files | length > cmdb_report.server_limit | int
   tags:
     - collect
     - limit
@@ -85,32 +61,28 @@
     - collect
     - debug
 
-# Créer le répertoire pour les fichiers JSON
-- name: Créer le répertoire pour les fichiers JSON
+# Créer le répertoire pour les fichiers JSON avec des permissions larges
+- name: Créer le répertoire pour les fichiers JSON avec des permissions larges
   file:
     path: "{{ cmdb_report.temp_dir }}/json"
     state: directory
-    mode: '0755'
+    mode: '0777'  # Permissions larges pour éviter les problèmes
   delegate_to: localhost
-  become: false
+  become: true  # Utiliser sudo pour être sûr de pouvoir créer avec des permissions larges
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:
     - collect
     - setup
 
-# Copier les fichiers JSON vers le répertoire temporaire
-- name: Copier les fichiers JSON vers le répertoire temporaire
-  fetch:
-    src: "{{ item.path }}"
-    dest: "{{ cmdb_report.temp_dir }}/json/"
-    flat: yes
+# Copier les fichiers JSON vers le répertoire temporaire en utilisant une nouvelle approche
+- name: Copier les fichiers JSON vers le répertoire temporaire (alternative)
+  shell: "cat {{ item.path }} > {{ cmdb_report.temp_dir }}/json/{{ item.path | basename }}"
   loop: "{{ cmdb_files }}"
   loop_control:
     label: "{{ item.path | basename }}"
   delegate_to: "{{ cmdb_manager_host }}"
-  become: false
-  when: cmdb_files is defined and cmdb_files | length > 0
   register: json_copy_result
+  when: cmdb_files is defined and cmdb_files | length > 0
   tags:
     - collect
     - copy
