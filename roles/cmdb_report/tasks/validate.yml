@@ -136,17 +136,42 @@
   stat:
     path: "{{ cmdb_repository.directory }}/reports"
   register: repository_dir_stat
-  delegate_to: "{{ cmdb_manager_host }}"
+  # Utiliser localhost comme fallback si cmdb_manager_host n'est pas défini
+  delegate_to: "{{ cmdb_manager_host | default('localhost') }}"
   become: false
   ignore_errors: true
   tags:
     - validate
     - repository
 
-- name: Échec si le répertoire repository n'existe pas
+- name: Créer les répertoires repository si nécessaire (local)
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - "{{ cmdb_repository.directory }}"
+    - "{{ cmdb_repository.directory }}/reports"
+    - "{{ cmdb_repository.directory }}/diagnostics"
+  when: 
+    - not repository_dir_stat.stat.exists | default(false)
+    - cmdb_repository_mode == 'local'
+  delegate_to: localhost
+  become: false
+  ignore_errors: true
+  tags:
+    - validate
+    - repository
+
+- name: Échec si le répertoire repository n'existe pas et n'a pas pu être créé
   fail:
-    msg: "Le répertoire repository '{{ cmdb_repository.directory }}/reports' n'existe pas sur {{ cmdb_manager_host }}."
-  when: not repository_dir_stat.stat.exists | default(false)
+    msg: >-
+      Le répertoire repository '{{ cmdb_repository.directory }}/reports' n'existe pas sur 
+      {{ cmdb_manager_host | default('localhost') }} et n'a pas pu être créé automatiquement.
+      Veuillez le créer manuellement ou utiliser un répertoire différent.
+  when: 
+    - not repository_dir_stat.stat.exists | default(false)
+    - cmdb_repository_mode != 'local'
   tags:
     - validate
     - repository
