@@ -1,48 +1,59 @@
 #!/usr/bin/env python3
-import sys
-import os
 import json
+import os
+import sys
 from datetime import datetime
-
-# Auto-installation des dépendances requises
 try:
     import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
 except ImportError:
     print("Le module openpyxl n'est pas installé. Tentative d'installation...")
-    import subprocess
     try:
+        import subprocess
         subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl"])
         import openpyxl
-        print("Installation de openpyxl réussie!")
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.utils import get_column_letter
+        print("openpyxl a été installé avec succès!")
     except Exception as e:
         print(f"Échec de l'installation de openpyxl: {e}")
-        sys.exit(1)
-
-try:
-    import jmespath
-except ImportError:
-    print("Le module jmespath n'est pas installé. Tentative d'installation...")
-    import subprocess
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "jmespath"])
-        import jmespath
-        print("Installation de jmespath réussie!")
-    except Exception as e:
-        print(f"Échec de l'installation de jmespath: {e}")
+        print("Assurez-vous que le package 'python3-venv' est installé sur votre système.")
+        print("Conseil: Exécutez 'sudo apt install python3-venv python3-full' avant de relancer le playbook.")
         sys.exit(1)
 
 def load_config():
     config_path = sys.argv[1] if len(sys.argv) > 1 else 'report_config.json'
-    with open(config_path, 'r') as f:
-        return json.load(f)
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Erreur lors du chargement de la configuration: {e}")
+        sys.exit(1)
 
 def load_data(config):
     data = []
     data_dir = config.get('data_dir', 'json')
-    for filename in os.listdir(data_dir):
-        if filename.endswith('.json'):
+    
+    # Vérifier si le répertoire existe
+    if not os.path.exists(data_dir):
+        print(f"ERREUR: Le répertoire {data_dir} n'existe pas!")
+        sys.exit(1)
+    
+    # Vérifier si des fichiers JSON existent dans le répertoire
+    json_files = [f for f in os.listdir(data_dir) if f.endswith('.json')]
+    if not json_files:
+        print(f"ERREUR: Aucun fichier JSON trouvé dans {data_dir}")
+        sys.exit(1)
+    
+    # Charger les fichiers JSON
+    for filename in json_files:
+        try:
             with open(os.path.join(data_dir, filename), 'r') as f:
                 data.append(json.load(f))
+        except Exception as e:
+            print(f"Erreur lors du chargement du fichier {filename}: {e}")
+    
     return data
 
 def format_header(ws, row=1):
@@ -102,17 +113,17 @@ def create_summary_sheet(wb, data, config):
         virt_count[virt] = virt_count.get(virt, 0) + 1
         
         # Count servers with updates
-        if isinstance(server['security']['updates_available'], int) and server['security']['updates_available'] > 0:
+        if isinstance(server['security'].get('updates_available'), int) and server['security'].get('updates_available', 0) > 0:
             servers_with_updates += 1
         
         # Count critical servers
-        if server['organizational']['criticality'] == 'Critique':
+        if server['organizational'].get('criticality') == 'Critique':
             critical_servers += 1
         
         # Check for expired certificates
         for cert in server['security'].get('certificates', {}).get('details', []):
             if 'stdout' in cert and 'notAfter' in cert['stdout']:
-                expiration_line = [line for line in cert['stdout_lines'] if 'notAfter' in line][0] if 'stdout_lines' in cert else ""
+                expiration_line = [line for line in cert.get('stdout_lines', []) if 'notAfter' in line][0] if 'stdout_lines' in cert else ""
                 if expiration_line and '2024' in expiration_line:  # Simplified check for expired certs in 2024
                     servers_with_expired_certs += 1
                     break
@@ -215,33 +226,33 @@ def create_servers_sheet(wb, data, config):
     
     # Fill data
     for row, server in enumerate(data, 2):
-        ws.cell(row=row, column=1).value = server['hostname']
-        ws.cell(row=row, column=2).value = server['network']['fqdn']
-        ws.cell(row=row, column=3).value = server['software']['os']['distribution']
-        ws.cell(row=row, column=4).value = server['software']['os']['distribution_version']
-        ws.cell(row=row, column=5).value = server['software']['kernel']['name']
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
+        ws.cell(row=row, column=2).value = server.get('network', {}).get('fqdn', 'N/A')
+        ws.cell(row=row, column=3).value = server.get('software', {}).get('os', {}).get('distribution', 'N/A')
+        ws.cell(row=row, column=4).value = server.get('software', {}).get('os', {}).get('distribution_version', 'N/A')
+        ws.cell(row=row, column=5).value = server.get('software', {}).get('kernel', {}).get('name', 'N/A')
         
         # Get default IP if available
-        if server['network'].get('default_ipv4', {}).get('address'):
+        if server.get('network', {}).get('default_ipv4', {}).get('address'):
             ws.cell(row=row, column=6).value = server['network']['default_ipv4']['address']
         else:
             # Try to get the first interface IP
-            interfaces = server['network'].get('interfaces', [])
-            if interfaces and 'ipv4' in interfaces[0] and 'address' in interfaces[0]['ipv4']:
+            interfaces = server.get('network', {}).get('interfaces', [])
+            if interfaces and interfaces[0].get('ipv4', {}).get('address'):
                 ws.cell(row=row, column=6).value = interfaces[0]['ipv4']['address']
             else:
                 ws.cell(row=row, column=6).value = "N/A"
         
-        ws.cell(row=row, column=7).value = server['organizational']['environment']
-        ws.cell(row=row, column=8).value = server['organizational']['role']
-        ws.cell(row=row, column=9).value = server['organizational']['criticality']
+        ws.cell(row=row, column=7).value = server.get('organizational', {}).get('environment', 'N/A')
+        ws.cell(row=row, column=8).value = server.get('organizational', {}).get('role', 'N/A')
+        ws.cell(row=row, column=9).value = server.get('organizational', {}).get('criticality', 'N/A')
         
         # Format applications list
-        apps = server['organizational'].get('applications', [])
+        apps = server.get('organizational', {}).get('applications', [])
         ws.cell(row=row, column=10).value = ", ".join(apps) if apps else "N/A"
         
         # Format collection date
-        col_date = server['collection_date']
+        col_date = server.get('collection_date')
         if col_date:
             try:
                 # Handle different date formats (with or without T/Z)
@@ -278,19 +289,19 @@ def create_hardware_sheet(wb, data, config):
     
     # Fill data
     for row, server in enumerate(data, 2):
-        hw = server['hardware']
+        hw = server.get('hardware', {})
         
-        ws.cell(row=row, column=1).value = server['hostname']
-        ws.cell(row=row, column=2).value = hw['system'].get('model', 'N/A')
-        ws.cell(row=row, column=3).value = hw['system'].get('manufacturer', 'N/A')
-        ws.cell(row=row, column=4).value = hw['system'].get('serial', 'N/A')
-        ws.cell(row=row, column=5).value = hw['system'].get('architecture', 'N/A')
-        ws.cell(row=row, column=6).value = hw['system'].get('virtualization_type', 'N/A')
-        ws.cell(row=row, column=7).value = hw['system'].get('virtualization_role', 'N/A')
-        ws.cell(row=row, column=8).value = hw['processor'].get('count', 'N/A')
-        ws.cell(row=row, column=9).value = hw['processor'].get('cores', 'N/A')
-        ws.cell(row=row, column=10).value = hw['processor'].get('threads_per_core', 'N/A')
-        ws.cell(row=row, column=11).value = hw['memory'].get('total_mb', 'N/A')
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
+        ws.cell(row=row, column=2).value = hw.get('system', {}).get('model', 'N/A')
+        ws.cell(row=row, column=3).value = hw.get('system', {}).get('manufacturer', 'N/A')
+        ws.cell(row=row, column=4).value = hw.get('system', {}).get('serial', 'N/A')
+        ws.cell(row=row, column=5).value = hw.get('system', {}).get('architecture', 'N/A')
+        ws.cell(row=row, column=6).value = hw.get('system', {}).get('virtualization_type', 'N/A')
+        ws.cell(row=row, column=7).value = hw.get('system', {}).get('virtualization_role', 'N/A')
+        ws.cell(row=row, column=8).value = hw.get('processor', {}).get('count', 'N/A')
+        ws.cell(row=row, column=9).value = hw.get('processor', {}).get('cores', 'N/A')
+        ws.cell(row=row, column=10).value = hw.get('processor', {}).get('threads_per_core', 'N/A')
+        ws.cell(row=row, column=11).value = hw.get('memory', {}).get('total_mb', 'N/A')
         
         # Format disks info
         disks = hw.get('disks', [])
@@ -322,14 +333,14 @@ def create_software_sheet(wb, data, config):
     
     # Fill data
     for row, server in enumerate(data, 2):
-        sw = server['software']
+        sw = server.get('software', {})
         
-        ws.cell(row=row, column=1).value = server['hostname']
-        ws.cell(row=row, column=2).value = sw['os'].get('distribution', 'N/A')
-        ws.cell(row=row, column=3).value = sw['os'].get('distribution_version', 'N/A')
-        ws.cell(row=row, column=4).value = sw['os'].get('distribution_release', 'N/A')
-        ws.cell(row=row, column=5).value = sw['kernel'].get('name', 'N/A')
-        ws.cell(row=row, column=6).value = sw['python'].get('version', 'N/A')
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
+        ws.cell(row=row, column=2).value = sw.get('os', {}).get('distribution', 'N/A')
+        ws.cell(row=row, column=3).value = sw.get('os', {}).get('distribution_version', 'N/A')
+        ws.cell(row=row, column=4).value = sw.get('os', {}).get('distribution_release', 'N/A')
+        ws.cell(row=row, column=5).value = sw.get('kernel', {}).get('name', 'N/A')
+        ws.cell(row=row, column=6).value = sw.get('python', {}).get('version', 'N/A')
         
         # Package count
         pkgs = sw.get('packages', {})
@@ -371,9 +382,9 @@ def create_network_sheet(wb, data, config):
     
     # Fill data
     for row, server in enumerate(data, 2):
-        net = server['network']
+        net = server.get('network', {})
         
-        ws.cell(row=row, column=1).value = server['hostname']
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
         ws.cell(row=row, column=2).value = net.get('fqdn', 'N/A')
         ws.cell(row=row, column=3).value = net.get('domain', 'N/A')
         
@@ -419,9 +430,9 @@ def create_security_sheet(wb, data, config):
     
     # Fill data
     for row, server in enumerate(data, 2):
-        sec = server['security']
+        sec = server.get('security', {})
         
-        ws.cell(row=row, column=1).value = server['hostname']
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
         ws.cell(row=row, column=2).value = sec.get('selinux', {}).get('status', 'N/A')
         ws.cell(row=row, column=3).value = sec.get('apparmor', {}).get('status', 'N/A')
         
@@ -469,9 +480,9 @@ def create_organizational_sheet(wb, data, config):
     
     # Fill data
     for row, server in enumerate(data, 2):
-        org = server['organizational']
+        org = server.get('organizational', {})
         
-        ws.cell(row=row, column=1).value = server['hostname']
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
         ws.cell(row=row, column=2).value = org.get('role', 'N/A')
         ws.cell(row=row, column=3).value = org.get('environment', 'N/A')
         ws.cell(row=row, column=4).value = org.get('criticality', 'N/A')
@@ -510,9 +521,9 @@ def create_certificates_sheet(wb, data, config):
     # Fill data
     row = 2
     for server in data:
-        hostname = server['hostname']
+        hostname = server.get('hostname', 'N/A')
         
-        cert_details = server['security'].get('certificates', {}).get('details', [])
+        cert_details = server.get('security', {}).get('certificates', {}).get('details', [])
         
         if not cert_details:
             # Add a row for servers with no certificates
@@ -578,19 +589,19 @@ def create_updates_sheet(wb, data, config):
     # Fill data
     row = 2
     for server in data:
-        ws.cell(row=row, column=1).value = server['hostname']
-        ws.cell(row=row, column=2).value = server['software']['os']['distribution']
-        ws.cell(row=row, column=3).value = server['software']['os']['distribution_version']
+        ws.cell(row=row, column=1).value = server.get('hostname', 'N/A')
+        ws.cell(row=row, column=2).value = server.get('software', {}).get('os', {}).get('distribution', 'N/A')
+        ws.cell(row=row, column=3).value = server.get('software', {}).get('os', {}).get('distribution_version', 'N/A')
         
         # Updates available
-        updates = server['security'].get('updates_available', 'N/A')
+        updates = server.get('security', {}).get('updates_available', 'N/A')
         ws.cell(row=row, column=4).value = updates
         if isinstance(updates, int) and updates > 0:
             ws.cell(row=row, column=4).fill = PatternFill(start_color='FFAAAA', end_color='FFAAAA', fill_type='solid')
         
         # Security features
-        ws.cell(row=row, column=5).value = server['security'].get('selinux', {}).get('status', 'N/A')
-        ws.cell(row=row, column=6).value = server['security'].get('apparmor', {}).get('status', 'N/A')
+        ws.cell(row=row, column=5).value = server.get('security', {}).get('selinux', {}).get('status', 'N/A')
+        ws.cell(row=row, column=6).value = server.get('security', {}).get('apparmor', {}).get('status', 'N/A')
         
         row += 1
     
@@ -634,6 +645,8 @@ def main():
         
     except Exception as e:
         print(f"Error generating report: {str(e)}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":

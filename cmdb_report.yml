@@ -48,7 +48,6 @@
   roles:
     - role: cmdb_report
       vars:
-        # Pas besoin de cmdb_venv_path
         
         # Utiliser les informations détectées automatiquement
         cmdb_repository:
@@ -73,6 +72,22 @@
             organizational: true
             certificates: true
             updates: true
+            
+        # Désactiver l'envoi par email pour contourner le problème de serveur SMTP
+        cmdb_email:
+          enabled: false  # Désactivé pour éviter l'erreur SMTP
+          smtp:
+            host: "localhost"  # Utilisation du serveur local pour éviter les erreurs DNS
+            port: 25
+            use_tls: false
+            use_ssl: false
+            username: ""
+            password: ""
+          from: "cmdb-report@example.com"
+          to: ["admin@example.com"]
+          subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date }}"
+          body_type: "html"
+          attach_report: true
       tags:
         - report
         

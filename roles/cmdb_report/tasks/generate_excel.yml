@@ -24,6 +24,31 @@
     - generate
     - config
 
+# Créer un environnement virtuel Python pour les dépendances
+- name: Créer un environnement virtuel Python
+  command:
+    cmd: "python3 -m venv {{ cmdb_report.temp_dir }}/venv"
+    creates: "{{ cmdb_report.temp_dir }}/venv/bin/python"
+  delegate_to: localhost
+  become: false
+  tags:
+    - generate
+    - venv
+
+# Installer les dépendances Python requises dans l'environnement virtuel
+- name: Installer les dépendances Python requises dans l'environnement virtuel
+  pip:
+    name:
+      - openpyxl>=3.0.0
+      - jmespath>=0.10.0
+    state: present
+    virtualenv: "{{ cmdb_report.temp_dir }}/venv"
+  delegate_to: localhost
+  become: false
+  tags:
+    - generate
+    - dependencies
+
 # Copier le script Python depuis les files du rôle
 - name: Copier le script Python pour la génération du rapport Excel
   copy:
@@ -36,23 +61,10 @@
     - generate
     - script
 
-# Installer les dépendances Python requises sans l'option --user
-- name: Installer les dépendances Python requises
-  pip:
-    name:
-      - openpyxl
-      - jmespath
-    state: present
-  delegate_to: localhost
-  become: true  # Utilisez sudo pour installer les packages
-  tags:
-    - generate
-    - dependencies
-
-# Exécuter le script Python pour générer le rapport Excel
+# Exécuter le script Python pour générer le rapport Excel en utilisant l'environnement virtuel
 - name: Générer le rapport Excel
   command:
-    cmd: "python3 {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
+    cmd: "{{ cmdb_report.temp_dir }}/venv/bin/python {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
     chdir: "{{ cmdb_report.temp_dir }}"
   delegate_to: localhost
   become: false
