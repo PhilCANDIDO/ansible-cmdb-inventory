@@ -24,6 +24,20 @@
     - generate
     - config
 
+# Installer les dépendances Python requises localement
+- name: Installer les dépendances Python requises localement
+  pip:
+    name:
+      - openpyxl
+      - jmespath
+    state: present
+    extra_args: "--user"  # Installe dans le répertoire utilisateur pour éviter les problèmes de permissions
+  delegate_to: localhost
+  become: false
+  tags:
+    - generate
+    - dependencies
+
 # Copier le script Python depuis les files du rôle
 - name: Copier le script Python pour la génération du rapport Excel
   copy:
