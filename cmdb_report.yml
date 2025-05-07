@@ -75,7 +75,7 @@
             
         # Désactiver l'envoi par email pour contourner le problème de serveur SMTP
         cmdb_email:
-          enabled: false  # Désactivé pour éviter l'erreur SMTP
+          enabled: true  # Désactivé pour éviter l'erreur SMTP
           smtp:
             host: "localhost"  # Utilisation du serveur local pour éviter les erreurs DNS
             port: 25

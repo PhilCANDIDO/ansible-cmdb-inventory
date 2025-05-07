@@ -3,16 +3,21 @@
 # ansible-vault create group_vars/all/vault.yml
 
 # Configuration SMTP
-vault_smtp_host: "smtp.example.com"
-vault_smtp_port: 587
-vault_smtp_use_tls: true
-vault_smtp_use_ssl: false
-vault_smtp_username: "cmdb-reports@example.com"
-vault_smtp_password: "motdepassetressecurise"
-vault_smtp_from: "cmdb-reports@example.com"
-
-# Liste des destinataires
-vault_smtp_recipients:
-  - "equipe-infrastructure@example.com"
-  - "responsable-it@example.com"
-  - "direction@example.com"
+cmdb_email:
+  enabled: true
+  smtp:
+    host: "smtp.example.com"
+    port: 587
+    use_tls: true
+    use_ssl: false
+    username: "cmdb-reports@example.com"
+    password: "VotreMotDePasseTresSecurise"
+  from: "cmdb-reports@example.com"
+  to:
+    - "equipe-infrastructure@example.com"
+    - "responsable-it@example.com"
+  cc:
+    - "direction@example.com"
+  subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date | default(lookup('pipe', 'date +%Y-%m-%d')) }}"
+  body_type: "html"
+  attach_report: true
