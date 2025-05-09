@@ -41,7 +41,7 @@
     secure: "{{ 'always' if cmdb_email.smtp.use_ssl else ('starttls' if cmdb_email.smtp.use_tls else 'try') }}"
     from: "{{ cmdb_email.from }}"
     to: "{{ cmdb_email.to | join(',') }}"
-    cc: "cc: \"{{ cmdb_email.cc | join(',') if (cmdb_email.cc is defined and cmdb_email.cc | length > 0) else omit }}"
+    cc: "{{ cmdb_email.cc | join(',') if (cmdb_email.cc is defined and cmdb_email.cc | length > 0) else omit }}"
     subject: "{{ cmdb_email.subject }}"
     body: "{{ lookup('file', cmdb_report.temp_dir + '/email_body.' + ('html' if cmdb_email.body_type == 'html' else 'txt')) }}"
     attach: "{{ [cmdb_report_excel_path] if cmdb_email.attach_report else omit }}"
