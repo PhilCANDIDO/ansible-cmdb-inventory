@@ -69,6 +69,12 @@
     - generate
     - excel
 
+- name: Inclusion des tâches de débogage
+  include_tasks: debug_tasks.yml
+  tags:
+    - never
+    - debug
+
 # Envoi par email
 - name: Inclusion des tâches d'envoi par email
   include_tasks: send_email.yml

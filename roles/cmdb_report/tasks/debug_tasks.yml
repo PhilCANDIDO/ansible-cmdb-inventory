@@ -1,0 +1,17 @@
+---
+# tasks/debug_tasks.yml - Tâches de débogage conditionnelles
+
+- name: Informations de débogage sur la configuration d'email
+  debug:
+    msg:
+      - "=== Configuration SMTP utilisée ==="
+      - "Enabled: {{ cmdb_email.enabled }}"
+      - "SMTP Host: {{ cmdb_email.smtp.host }}"
+      - "SMTP Port: {{ cmdb_email.smtp.port }}"
+      - "SMTP Username: {{ cmdb_email.smtp.username }}"
+      - "SMTP TLS: {{ cmdb_email.smtp.use_tls }}"
+      - "SMTP SSL: {{ cmdb_email.smtp.use_ssl }}"
+      - "From: {{ cmdb_email.from }}"
+      - "To: {{ cmdb_email.to | join(', ') }}"
+      - "CC: {{ cmdb_email.cc | default([]) | join(', ') }}"
+      - "Subject: {{ cmdb_email.subject }}"
