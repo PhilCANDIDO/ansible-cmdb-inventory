@@ -1,0 +1,19 @@
+# Configuration combinée qui priorise le vault mais utilise les défauts quand nécessaire
+cmdb_email_combined:
+  enabled: "{{ vault_cmdb_email.enabled | default(cmdb_email_defaults.enabled) }}"
+  smtp:
+    host: "{{ vault_cmdb_email.smtp.host | default(cmdb_email_defaults.smtp.host) }}"
+    port: "{{ vault_cmdb_email.smtp.port | default(cmdb_email_defaults.smtp.port) }}"
+    use_tls: "{{ vault_cmdb_email.smtp.use_tls | default(cmdb_email_defaults.smtp.use_tls) }}"
+    use_ssl: "{{ vault_cmdb_email.smtp.use_ssl | default(cmdb_email_defaults.smtp.use_ssl) }}"
+    username: "{{ vault_cmdb_email.smtp.username | default(cmdb_email_defaults.smtp.username) }}"
+    password: "{{ vault_cmdb_email.smtp.password | default(cmdb_email_defaults.smtp.password) }}"
+  from: "{{ vault_cmdb_email.from | default(cmdb_email_defaults.from) }}"
+  to: "{{ vault_cmdb_email.to | default(cmdb_email_defaults.to) }}"
+  cc: "{{ vault_cmdb_email.cc | default(cmdb_email_defaults.cc) }}"
+  subject: "{{ vault_cmdb_email.subject | default(cmdb_email_defaults.subject) }}"
+  body_type: "{{ vault_cmdb_email.body_type | default(cmdb_email_defaults.body_type) }}"
+  attach_report: "{{ vault_cmdb_email.attach_report | default(cmdb_email_defaults.attach_report) }}"
+
+# Cette variable sera utilisée par le rôle
+cmdb_email: "{{ cmdb_email_combined }}"

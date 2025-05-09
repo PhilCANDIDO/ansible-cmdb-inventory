@@ -3,7 +3,7 @@
 # ansible-vault create group_vars/all/vault.yml
 
 # Configuration SMTP
-cmdb_email:
+vault_cmdb_email:
   enabled: true
   smtp:
     host: "smtp.example.com"

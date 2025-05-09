@@ -1,0 +1,16 @@
+# Valeurs par défaut à utiliser si non définies dans le vault
+cmdb_email_defaults:
+  enabled: false
+  smtp:
+    host: "localhost"
+    port: 25
+    use_tls: false
+    use_ssl: false
+    username: ""
+    password: ""
+  from: "cmdb-report@example.com"
+  to: ["admin@example.com"]
+  cc: []
+  subject: "Rapport d'inventaire CMDB - {{ ansible_date_time.date | default(lookup('pipe', 'date +%Y-%m-%d')) }}"
+  body_type: "html"
+  attach_report: true
