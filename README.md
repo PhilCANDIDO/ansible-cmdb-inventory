@@ -75,14 +75,14 @@ This role integrates several specific optimizations for managing large server fl
 ### Via Ansible Galaxy
 
 ```bash
-ansible-galaxy install git+https://github.com/your-username/ansible-cmdb-inventory.git
+ansible-galaxy install git+https://github.com/PhilCANDIDO/ansible-cmdb-inventory.git
 ```
 
 ### Manual Installation
 
 1. Clone this repository to your Ansible roles directory:
    ```bash
-   git clone https://github.com/your-username/ansible-cmdb-inventory.git /etc/ansible/roles/cmdb_inventory
+   git clone https://github.com/PhilCANDIDO/ansible-cmdb-inventory.git /etc/ansible/roles/cmdb_inventory
    ```
 
 2. Install required dependencies:
@@ -159,6 +159,40 @@ For large environments (several thousand servers), use the `--forks` option to i
 ```bash
 ansible-playbook -i inventory.ini cmdb_inventory.yml --forks=100
 ```
+
+## Repository Mode
+
+The role offers two modes of operation:
+
+1. **Local mode**: All inventory data is stored on the Ansible controller
+2. **Manager mode**: Uses a dedicated server as a central repository
+
+To use manager mode, define a server in your inventory with the group `cmdb_repository`:
+
+```ini
+[cmdb_repository]
+cmdb-manager.example.com
+```
+
+Then use the dedicated playbook:
+
+```bash
+ansible-playbook -i inventory.ini cmdb_inventory_with_repository.yml
+```
+
+## Report Generation
+
+A complementary role `cmdb_report` is included to generate Excel reports from the collected data:
+
+```bash
+ansible-playbook -i inventory.ini cmdb_report.yml
+```
+
+Report features:
+- Multiple sheets for different data categories
+- Summary with statistics and key metrics
+- Highlighting for critical issues
+- Email distribution capability
 
 ## Integration with CMDB Solutions
 
