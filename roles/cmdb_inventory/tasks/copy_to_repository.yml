@@ -49,28 +49,82 @@
   tags:
     - debug
 
-# S'assurer que les répertoires destination existent sur le repository avec des permissions appropriées
-- name: (copy_to_repository) Créer les répertoires sur le repository
+# S'assurer que les répertoires existent sur le repository avec des permissions appropriées
+# Modification clé : amélioration de la création des répertoires sur le serveur repository
+- name: (copy_to_repository) Vérifier l'existence des répertoires sur le repository
+  stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ cmdb_inventory_repository_dir }}"
+    - "{{ cmdb_inventory_repository_dir }}/reports"
+    - "{{ cmdb_inventory_repository_dir }}/diagnostics"
+  register: repo_dirs_exist
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  tags:
+    - setup
+
+# Correction clé : création récursive du répertoire principal ET de ses sous-répertoires
+- name: (copy_to_repository) Créer le répertoire principal sur le repository
+  file:
+    path: "{{ cmdb_inventory_repository_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: true  # Utiliser sudo pour s'assurer des permissions
+  register: main_dir_created
+  when: not repo_dirs_exist.results[0].stat.exists | default(false)
+  tags:
+    - setup
+
+- name: (copy_to_repository) Créer le sous-répertoire reports sur le repository
+  file:
+    path: "{{ cmdb_inventory_repository_dir }}/reports"
+    state: directory
+    mode: '0755'
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: true  # Utiliser sudo pour s'assurer des permissions
+  register: reports_dir_created
+  when: not repo_dirs_exist.results[1].stat.exists | default(false)
+  tags:
+    - setup
+
+- name: (copy_to_repository) Créer le sous-répertoire diagnostics sur le repository
+  file:
+    path: "{{ cmdb_inventory_repository_dir }}/diagnostics"
+    state: directory
+    mode: '0755'
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: true  # Utiliser sudo pour s'assurer des permissions
+  register: diagnostics_dir_created
+  when: not repo_dirs_exist.results[2].stat.exists | default(false)
+  tags:
+    - setup
+
+# Assurons-nous que les permissions sont correctes
+- name: (copy_to_repository) Ajuster les permissions des répertoires sur le repository
   file:
     path: "{{ item }}"
     state: directory
     mode: '0755'
-    recurse: yes
+    owner: "{{ ansible_user | default('deploy') }}"  # Utilisez l'utilisateur approprié
+    group: "{{ ansible_user | default('deploy') }}"  # Utilisez le groupe approprié
   loop:
+    - "{{ cmdb_inventory_repository_dir }}"
     - "{{ cmdb_inventory_repository_dir }}/reports"
     - "{{ cmdb_inventory_repository_dir }}/diagnostics"
   delegate_to: "{{ cmdb_inventory_repository_host }}"
-  run_once: false
   become: true  # Utiliser sudo pour s'assurer des permissions
-  ignore_errors: true
-  register: dirs_created
   tags:
     - setup
 
 # Afficher le résultat de la création des répertoires
 - name: (copy_to_repository) Afficher le résultat de la création des répertoires
   debug:
-    msg: "Répertoires créés avec succès: {{ dirs_created is success }}"
+    msg: |
+      Répertoires créés/vérifiés:
+      - Principal: {{ main_dir_created.changed | default(false) }}
+      - Reports: {{ reports_dir_created.changed | default(false) }}
+      - Diagnostics: {{ diagnostics_dir_created.changed | default(false) }}
   tags:
     - debug
 
@@ -106,6 +160,21 @@
   tags:
     - debug
 
+# Si le répertoire alternatif est /tmp, il faut s'assurer qu'il existe aussi
+- name: (copy_to_repository) Créer les répertoires temporaires alternatifs si nécessaire
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ actual_repository_dir }}/reports"
+    - "{{ actual_repository_dir }}/diagnostics"
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  when: actual_repository_dir == '/tmp'
+  become: true
+  tags:
+    - setup
+
 # Bloc pour le traitement des fichiers d'inventaire
 - name: (copy_to_repository) Traitement des fichiers d'inventaire
   block:
@@ -117,7 +186,6 @@
         mode: '0644'
       loop: "{{ inventory_files_found }}"
       delegate_to: localhost
-      become: false
       register: inventory_copy_result
       when: inventory_files_found | length > 0
 
@@ -150,7 +218,6 @@
         mode: '0644'
       loop: "{{ diagnostic_files_found }}"
       delegate_to: localhost
-      become: false
       register: diagnostic_copy_result
       when: diagnostic_files_found | length > 0
 
