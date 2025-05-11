@@ -1,6 +1,5 @@
 # roles/cmdb_inventory/tasks/copy_to_repository.yml
 ---
-# Improved version to fix path handling issues and ensure reliable file transfers
 
 # Afficher les informations de débogage des chemins
 - name: (copy_to_repository) Afficher les informations des chemins et du repository
@@ -9,7 +8,7 @@
       - "Repository host: {{ cmdb_inventory_repository_host }}"
       - "Repository directory: {{ cmdb_inventory_repository_dir }}"
       - "Temporary directory: {{ temp_cmdb_controller }}"
-      - "Inventory hostname: {{ inventory_hostname }}"
+      - "Inventory hostname: {{ managed_node_name }}"
       - "Inventory format: {{ cmdb_output_format }}"
   run_once: false
   tags:
@@ -17,7 +16,7 @@
 
 # Vérifie l'existence des fichiers sur le contrôleur avec des appels find natifs
 - name: (copy_to_repository) Vérifier l'existence des fichiers avec find
-  shell: "find {{ temp_cmdb_controller | quote }} -type f -name '*{{ inventory_hostname }}*' | sort"
+  shell: "find {{ temp_cmdb_controller | quote }} -type f -name '*{{ managed_node_name }}*' | sort"
   register: found_files
   delegate_to: localhost
   become: false
@@ -36,8 +35,8 @@
 # Définir l'état des fichiers basé sur le résultat de find
 - name: (copy_to_repository) Définir l'état des fichiers d'inventaire
   set_fact:
-    inventory_files_found: "{{ found_files.stdout_lines | select('search', inventory_hostname + '.*_cmdb_inventory') | list }}"
-    diagnostic_files_found: "{{ found_files.stdout_lines | select('search', inventory_hostname + '.*_diagnostic') | list }}"
+    inventory_files_found: "{{ found_files.stdout_lines | select('search', managed_node_name + '.*_cmdb_inventory') | list }}"
+    diagnostic_files_found: "{{ found_files.stdout_lines | select('search', managed_node_name + '.*_diagnostic') | list }}"
   tags:
     - files
 
@@ -77,7 +76,7 @@
 
 # Tester l'accès en écriture sur le repository (pour vérifier les permissions)
 - name: (copy_to_repository) Tester l'accès en écriture sur le repository
-  shell: "touch {{ cmdb_inventory_repository_dir }}/reports/write_test_{{ inventory_hostname }}.tmp && rm -f {{ cmdb_inventory_repository_dir }}/reports/write_test_{{ inventory_hostname }}.tmp"
+  shell: "touch {{ cmdb_inventory_repository_dir }}/reports/write_test_{{ managed_node_name }}.tmp && rm -f {{ cmdb_inventory_repository_dir }}/reports/write_test_{{ managed_node_name }}.tmp"
   delegate_to: "{{ cmdb_inventory_repository_host }}"
   become: true
   register: write_test
