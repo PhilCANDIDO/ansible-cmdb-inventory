@@ -79,9 +79,7 @@
 
 # Copier le rapport Excel vers le serveur repository si le mode est manager
 - name: (main) Copier le rapport Excel vers le serveur repository
-  copy:
-    src: "{{ cmdb_report_excel_path }}"
-    dest: "{{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports/"
+  shell: "cp {{ cmdb_report_excel_path }} {{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports/"
   delegate_to: "{{ cmdb_manager_host }}"
   when: 
     - cmdb_repository_mode == 'manager'
