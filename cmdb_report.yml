@@ -4,7 +4,6 @@
 
 - name: Générer et envoyer le rapport CMDB
   hosts: localhost
-  connection: local
   gather_facts: true
   become: false
   
