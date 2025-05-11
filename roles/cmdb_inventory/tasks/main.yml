@@ -211,6 +211,7 @@
     state: absent
   run_once: true
   delegate_to: localhost
+  become: false
   when: 
     - remote_dir_creation is success
     - cmdb_repository_mode == "manager"  # Uniquement en mode manager
