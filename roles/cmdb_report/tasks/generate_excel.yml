@@ -7,8 +7,7 @@
     path: "{{ cmdb_report.temp_dir }}/python"
     state: directory
     mode: '0755'
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - generate
     - setup
@@ -18,8 +17,7 @@
   template:
     src: report_config.j2
     dest: "{{ cmdb_report.temp_dir }}/report_config.json"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - generate
     - config
@@ -29,8 +27,7 @@
   command:
     cmd: "python3 -m venv {{ cmdb_report.temp_dir }}/venv"
     creates: "{{ cmdb_report.temp_dir }}/venv/bin/python"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - generate
     - venv
@@ -43,8 +40,7 @@
       - jmespath>=0.10.0
     state: present
     virtualenv: "{{ cmdb_report.temp_dir }}/venv"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - generate
     - dependencies
@@ -55,8 +51,7 @@
     src: generate_excel.py
     dest: "{{ cmdb_report.temp_dir }}/generate_excel.py"
     mode: '0755'
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - generate
     - script
@@ -66,8 +61,7 @@
   command:
     cmd: "{{ cmdb_report.temp_dir }}/venv/bin/python {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
     chdir: "{{ cmdb_report.temp_dir }}"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   register: excel_generation
   failed_when: excel_generation.rc != 0
   changed_when: true
