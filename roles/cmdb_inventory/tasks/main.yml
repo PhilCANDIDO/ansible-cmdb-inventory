@@ -207,12 +207,12 @@
 # Récupérer les rapports CMDB dans un dossier temporaire du contrôleur avec gestion explicite des erreurs
 - name: (main) Récupérer les rapports CMDB dans un dossier temporaire du contrôleur
   block:
-    - name: Vérifier l'existence du fichier d'inventaire sur le serveur cible
+    - name: (main) Vérifier l'existence du fichier d'inventaire sur le serveur cible
       stat:
         path: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
       register: inventory_file_check
       
-    - name: Récupérer le fichier d'inventaire s'il existe
+    - name: (main) Récupérer le fichier d'inventaire s'il existe
       fetch:
         src: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
         dest: "{{ temp_cmdb_controller }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
@@ -220,7 +220,7 @@
       when: inventory_file_check.stat.exists | default(false)
       register: fetch_result
   rescue:
-    - name: Signaler l'échec de la récupération du fichier d'inventaire
+    - name: (main) Signaler l'échec de la récupération du fichier d'inventaire
       debug:
         msg: "Échec de la récupération du fichier d'inventaire pour {{ inventory_hostname }}"
   when: remote_dir_creation is success
@@ -228,15 +228,24 @@
     - fetch
     - inventory
 
+# Afficher le résultat de la récupération du fichier d'inventaire
+- name: (main) Afficher le résultat de la récupération du fichier d'inventaire
+  debug:
+    msg: "Résultat de la récupération du fichier d'inventaire {{ temp_cmdb_controller }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }} : {{ fetch_result }}"
+  when: remote_dir_creation is success
+  tags:
+    - fetch
+    - debug
+
 # Récupérer les diagnostics aussi si activés avec une meilleure gestion des erreurs
 - name: (main) Récupérer les diagnostics dans un dossier temporaire du contrôleur
   block:
-    - name: Vérifier l'existence du fichier de diagnostic sur le serveur cible
+    - name: (main) Vérifier l'existence du fichier de diagnostic sur le serveur cible
       stat:
         path: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
       register: diagnostic_file_check
       
-    - name: Récupérer le fichier de diagnostic s'il existe
+    - name: (main) Récupérer le fichier de diagnostic s'il existe
       fetch:
         src: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
         dest: "{{ temp_cmdb_controller }}/diagnostics/{{ ansible_hostname | default(inventory_hostname) }}_diagnostic.yml"
@@ -244,7 +253,7 @@
       when: diagnostic_file_check.stat.exists | default(false)
       register: diagnostic_fetch_result
   rescue:
-    - name: Signaler l'échec de la récupération du fichier de diagnostic
+    - name: (main) Signaler l'échec de la récupération du fichier de diagnostic
       debug:
         msg: "Échec de la récupération du fichier de diagnostic pour {{ inventory_hostname }}"
   when: 
