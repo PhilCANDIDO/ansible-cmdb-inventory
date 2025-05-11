@@ -85,7 +85,6 @@
     - 'json'
     - 'python'
   delegate_to: "{{ cmdb_manager_host }}"
-  become: false
   tags:
     - validate
     - tempdir
