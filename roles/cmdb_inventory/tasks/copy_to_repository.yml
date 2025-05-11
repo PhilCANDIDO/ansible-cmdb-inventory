@@ -117,6 +117,7 @@
         mode: '0644'
       loop: "{{ inventory_files_found }}"
       delegate_to: localhost
+      become: false
       register: inventory_copy_result
       when: inventory_files_found | length > 0
 
@@ -149,6 +150,7 @@
         mode: '0644'
       loop: "{{ diagnostic_files_found }}"
       delegate_to: localhost
+      become: false
       register: diagnostic_copy_result
       when: diagnostic_files_found | length > 0
 
