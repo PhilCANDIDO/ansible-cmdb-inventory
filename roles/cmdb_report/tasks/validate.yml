@@ -93,7 +93,7 @@
 # Vérifier la connectivité avec le serveur repository
 - name: (validate) Vérifier la connectivité avec le serveur repository (ping)
   ping:
-  delegate_to: ""{{ cmdb_manager_host }}""
+  delegate_to: "{{ cmdb_manager_host }}"
   register: repository_ping
   ignore_errors: true
   when: cmdb_repository_mode == 'manager'
@@ -134,7 +134,7 @@
   stat:
     path: "{{ cmdb_repository.directory }}/reports"
   register: repository_dir_stat
-  delegate_to: ""{{ cmdb_manager_host }}""
+  delegate_to: "{{ cmdb_manager_host }}"
   ignore_errors: true
   tags:
     - validate
@@ -164,7 +164,7 @@
   copy:
     content: "Test d'écriture pour le rapport CMDB - {{ ansible_date_time.iso8601 }}"
     dest: "{{ cmdb_repository.directory }}/reports/write_test.txt"
-  delegate_to: ""{{ cmdb_manager_host }}""
+  delegate_to: "{{ cmdb_manager_host }}"
   become: false
   register: write_test
   ignore_errors: true
@@ -178,7 +178,7 @@
   file:
     path: "{{ cmdb_repository.directory }}/reports/write_test.txt"
     state: absent
-  delegate_to: ""{{ cmdb_manager_host }}""
+  delegate_to: "{{ cmdb_manager_host }}"
   become: false
   when: write_test is success
   ignore_errors: true
