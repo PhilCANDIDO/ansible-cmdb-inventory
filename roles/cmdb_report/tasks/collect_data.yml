@@ -102,7 +102,7 @@
     paths: "{{ cmdb_report.temp_dir }}/json"
     patterns: "*.json"
   register: copied_files
-  delegate_to: localhost
+  delegate_to: "{{ cmdb_manager_host }}"
   become: false
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:
@@ -123,7 +123,7 @@
   set_fact:
     cmdb_data: []
     cmdb_stats: {}
-  delegate_to: localhost
+  delegate_to: "{{ cmdb_manager_host }}"
   become: false
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:

@@ -124,8 +124,7 @@
   file:
     path: "{{ cmdb_report.temp_dir }}"
     state: absent
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   ignore_errors: true
   when: 
     - cmdb_report.temp_dir is defined 
