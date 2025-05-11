@@ -7,8 +7,7 @@
     gather_subset:
       - '!all'
       - 'distribution'
-  delegate_to: localhost
-  become: false
+  delegate_to: {{ cmdb_manager_host }}
   tags:
     - validate
     - os_check
@@ -20,8 +19,7 @@
       - python3-venv
       - python3-full
     state: present
-  delegate_to: localhost
-  become: true
+  delegate_to: {{ cmdb_manager_host }}
   when: ansible_os_family == "Debian"
   ignore_errors: true
   register: venv_packages_debian
@@ -35,8 +33,7 @@
       - python3
       - python3-devel
     state: present
-  delegate_to: localhost
-  become: true
+  delegate_to: {{ cmdb_manager_host }}
   when: ansible_os_family == "RedHat"
   ignore_errors: true
   register: venv_packages_redhat
@@ -50,8 +47,7 @@
       - python3
       - python3-devel
     state: present
-  delegate_to: localhost
-  become: true
+  delegate_to: {{ cmdb_manager_host }}
   when: ansible_os_family == "Suse"
   ignore_errors: true
   register: venv_packages_suse
@@ -65,8 +61,7 @@
     path: "{{ cmdb_report.temp_dir }}"
     state: directory
     mode: '0755'
-  delegate_to: localhost
-  become: false
+  delegate_to: {{ cmdb_manager_host }}
   register: temp_dir_creation
   tags:
     - validate
@@ -89,7 +84,7 @@
   with_items:
     - 'json'
     - 'python'
-  delegate_to: localhost
+  delegate_to: {{ cmdb_manager_host }}
   become: false
   tags:
     - validate
@@ -140,7 +135,6 @@
     path: "{{ cmdb_repository.directory }}/reports"
   register: repository_dir_stat
   delegate_to: "{{ cmdb_manager_host }}"
-  become: false
   ignore_errors: true
   tags:
     - validate
@@ -159,8 +153,7 @@
   when: 
     - not repository_dir_stat.stat.exists | default(false)
     - cmdb_repository_mode == 'local'
-  delegate_to: localhost
-  become: false
+  delegate_to: local
   ignore_errors: true
   tags:
     - validate
