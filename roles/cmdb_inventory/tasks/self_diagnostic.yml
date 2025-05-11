@@ -1,0 +1,179 @@
+# roles/cmdb_inventory/tasks/self_diagnostic.yml
+---
+# Diagnostiquer les capacités du système cible et les prérequis pour l'inventaire CMDB
+
+# Vérifier les dépendances Python (notamment jmespath pour json_query)
+- name: Vérifier si jmespath est installé
+  block:
+    - name: Tester l'import de jmespath
+      command: "{{ ansible_python.executable }} -c 'import jmespath'"
+      register: jmespath_test
+      changed_when: false
+      failed_when: false
+      
+    - name: Définir la disponibilité de jmespath
+      set_fact:
+        use_jmespath: "{{ jmespath_test.rc == 0 }}"
+      
+    - name: Message d'avertissement pour jmespath manquant
+      debug:
+        msg: "AVERTISSEMENT: Le module Python 'jmespath' n'est pas installé. Certaines fonctionnalités avancées seront limitées."
+      when: not use_jmespath | bool
+  rescue:
+    - name: Définir jmespath comme non disponible en cas d'erreur
+      set_fact:
+        use_jmespath: false
+      
+    - name: Message d'erreur pour la vérification de jmespath
+      debug:
+        msg: "ERREUR: Impossible de vérifier la disponibilité de jmespath."
+
+# Vérifier les outils système requis
+- name: Vérifier les outils système nécessaires
+  block:
+    - name: Vérifier si dmidecode est installé
+      command: which dmidecode
+      register: dmidecode_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Définir la disponibilité de dmidecode
+      set_fact:
+        dmidecode_available: "{{ dmidecode_check.rc == 0 }}"
+      
+    - name: Message d'avertissement pour dmidecode manquant
+      debug:
+        msg: "AVERTISSEMENT: L'outil 'dmidecode' n'est pas installé. Les informations matérielles seront limitées."
+      when: not dmidecode_available | bool
+  rescue:
+    - name: Définir dmidecode comme non disponible en cas d'erreur
+      set_fact:
+        dmidecode_available: false
+
+# Diagnostiquer les capacités réseau
+- name: Vérifier les outils réseau
+  block:
+    - name: Vérifier si ip est disponible
+      command: which ip
+      register: ip_cmd_check
+      changed_when: false
+      failed_when: false
+      
+    - name: Définir la disponibilité de l'outil ip
+      set_fact:
+        ip_cmd_available: "{{ ip_cmd_check.rc == 0 }}"
+      
+    - name: Message d'avertissement si ip n'est pas disponible
+      debug:
+        msg: "AVERTISSEMENT: L'outil 'ip' n'est pas disponible. Les informations de routage seront limitées."
+      when: not ip_cmd_available | bool
+  rescue:
+    - name: Définir ip comme non disponible en cas d'erreur
+      set_fact:
+        ip_cmd_available: false
+
+# Vérifier l'accès sudo
+- name: Vérifier les privilèges sudo
+  block:
+    - name: Tester le sudo
+      command: whoami
+      become: true
+      register: sudo_test
+      changed_when: false
+      failed_when: false
+      
+    - name: Définir la disponibilité de sudo
+      set_fact:
+        sudo_available: "{{ sudo_test.rc == 0 and sudo_test.stdout == 'root' }}"
+      
+    - name: Message d'avertissement si sudo n'est pas disponible
+      debug:
+        msg: "AVERTISSEMENT: Les privilèges sudo ne sont pas disponibles. Certaines informations système seront limitées."
+      when: not sudo_available | bool
+  rescue:
+    - name: Définir sudo comme non disponible en cas d'erreur
+      set_fact:
+        sudo_available: false
+
+# Vérifier l'espace disque
+- name: Vérifier l'espace disque temporaire
+  block:
+    - name: Obtenir l'espace disque disponible dans le répertoire temporaire
+      shell: "df -P {{ cmdb_inventory_remote_dir }} | tail -1 | awk '{print $4}'"
+      register: disk_space
+      changed_when: false
+      failed_when: false
+      
+    - name: Définir si l'espace disque est suffisant
+      set_fact:
+        disk_space_sufficient: "{{ disk_space.stdout|int > 10240 }}"  # Plus de 10 Mo
+      
+    - name: Message d'avertissement si l'espace disque est insuffisant
+      debug:
+        msg: "AVERTISSEMENT: L'espace disque disponible est limité ({{ disk_space.stdout|int // 1024 }} Mo). L'inventaire pourrait être incomplet."
+      when: not disk_space_sufficient | bool
+  rescue:
+    - name: Définir l'espace disque comme suffisant par défaut en cas d'erreur
+      set_fact:
+        disk_space_sufficient: true
+
+# Générer le fichier de diagnostic
+- name: Créer un fichier diagnostic.yml pour collecter l'état du système
+  template:
+    src: diagnostic.j2
+    dest: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+    mode: '0644'
+  vars:
+    diagnostic_data:
+      hostname: "{{ ansible_hostname | default(inventory_hostname) }}"
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      system:
+        distribution: "{{ ansible_distribution | default('unknown') }} {{ ansible_distribution_version | default('unknown') }}"
+        kernel: "{{ ansible_kernel | default('unknown') }}"
+        architecture: "{{ ansible_architecture | default('unknown') }}"
+        virtualization: "{{ ansible_virtualization_type | default('unknown') }} ({{ ansible_virtualization_role | default('unknown') }})"
+      accessibility:
+        ssh_accessible: true
+        facts_available: "{{ ansible_processor_count is defined }}"
+        sudo_access: "{{ sudo_available | default(false) }}"
+      requirements:
+        python_version: "{{ ansible_python.version.major }}.{{ ansible_python.version.minor }}"
+        dmidecode_installed: "{{ dmidecode_available | default(false) }}"
+        jmespath_available: "{{ use_jmespath | default(false) }}"
+        ip_command_available: "{{ ip_cmd_available | default(false) }}"
+      runtime:
+        inventory_strategy: "{{ inventory_strategy | default('full') }}"
+        repository_mode: "{{ cmdb_repository_mode | default('local') }}"
+        repository_host: "{{ cmdb_inventory_repository_host | default('localhost') }}"
+        disk_space_sufficient: "{{ disk_space_sufficient | default(true) }}"
+  ignore_errors: true
+  when: (ansible_date_time is defined) and (ansible_python is defined)
+
+# Alternative simplifiée si les facts ne sont pas complets
+- name: Créer un fichier diagnostic simplifié si les facts ne sont pas disponibles
+  copy:
+    dest: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+    content: |
+      ---
+      # Diagnostic simplifié généré le {{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}
+      hostname: {{ inventory_hostname }}
+      timestamp: {{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}
+      
+      system:
+        facts_limited: true
+      
+      accessibility:
+        ssh_accessible: true
+        facts_available: false
+      
+      requirements:
+        limited_check: true
+      
+      runtime:
+        inventory_strategy: "{{ inventory_strategy | default('full') }}"
+        repository_mode: "{{ cmdb_repository_mode | default('local') }}"
+        repository_host: "{{ cmdb_inventory_repository_host | default('localhost') }}"
+    mode: '0644'
+  ignore_errors: true
+  when: (ansible_date_time is not defined) or (ansible_python is not defined)
+  

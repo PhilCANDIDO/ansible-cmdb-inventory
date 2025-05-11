@@ -27,7 +27,6 @@ host_vars/*/vault.yml
 *_cmdb_inventory.json
 *_cmdb_inventory.yaml
 *_cmdb_inventory.yml
-*_diagnostic.yml
 
 # Fichiers de certificats, clés et autres données sensibles
 *.pem
