@@ -9,7 +9,6 @@
     recurse: no
   register: json_files
   delegate_to: "{{ cmdb_manager_host }}"
-  become: false
   tags:
     - collect
     - find
@@ -67,8 +66,7 @@
     path: "{{ cmdb_report.temp_dir }}/json"
     state: directory
     mode: '0777'  # Permissions larges pour éviter les problèmes
-  delegate_to: localhost
-  become: true  # Utiliser sudo pour être sûr de pouvoir créer avec des permissions larges
+  delegate_to: "{{ cmdb_manager_host }}"
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:
     - collect
@@ -103,7 +101,6 @@
     patterns: "*.json"
   register: copied_files
   delegate_to: "{{ cmdb_manager_host }}"
-  become: false
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:
     - collect
@@ -123,8 +120,7 @@
   set_fact:
     cmdb_data: []
     cmdb_stats: {}
-  delegate_to: "{{ cmdb_manager_host }}"
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"s
   when: cmdb_files is defined and cmdb_files | length > 0
   tags:
     - collect
