@@ -24,26 +24,27 @@
 - name: Transformer les informations de disques (sans json_query)
   set_fact:
     hardware_disks: "{{ hardware_disks + [{ 
-      'name': item.key, 
-      'size': item.value.size | default('unknown'),
-      'sectors': item.value.sectors | default('unknown'),
-      'sectorsize': item.value.sectorsize | default('unknown'),
-      'model': item.value.model | default('unknown'),
-      'vendor': item.value.vendor | default('unknown'),
-      'removable': item.value.removable | default(false),
-      'rotational': item.value.rotational | default(true),
-      'scheduler_mode': item.value.scheduler_mode | default('unknown'),
-      'partitions': item.value.partitions | default({})
+      'name': disk_item.key, 
+      'size': disk_item.value.size | default('unknown'),
+      'sectors': disk_item.value.sectors | default('unknown'),
+      'sectorsize': disk_item.value.sectorsize | default('unknown'),
+      'model': disk_item.value.model | default('unknown'),
+      'vendor': disk_item.value.vendor | default('unknown'),
+      'removable': disk_item.value.removable | default(false),
+      'rotational': disk_item.value.rotational | default(true),
+      'scheduler_mode': disk_item.value.scheduler_mode | default('unknown'),
+      'partitions': disk_item.value.partitions | default({})
     }] }}"
   when: 
     - ansible_devices is defined
     - not use_jmespath | default(false)
-    - item.key is not match("^loop") 
-    - item.key is not match("^ram")
-    - item.key is not match("^sr")
+    - disk_item.key is not match("^loop") 
+    - disk_item.key is not match("^ram")
+    - disk_item.key is not match("^sr")
   loop: "{{ ansible_devices | dict2items }}"
   loop_control:
-    label: "{{ item.key }}"
+    loop_var: disk_item
+    label: "{{ disk_item.key }}"
 
 - name: Ajouter les disques aux informations matérielles (sans json_query)
   set_fact:

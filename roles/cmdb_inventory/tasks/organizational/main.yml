@@ -4,13 +4,16 @@
   block:
     - name: Vérifier l'existence de fichiers de métadonnées organisationnelles
       stat:
-        path: "{{ item }}"
+        path: "{{ org_file_path }}"
       register: org_files
       loop:
         - /etc/org_metadata.json
         - /etc/server_purpose
         - /etc/server_owner
         - /etc/server_environment
+      loop_control:
+        loop_var: org_file_path
+        label: "{{ org_file_path }}"
 
     - name: Créer une liste des fichiers existants
       set_fact:

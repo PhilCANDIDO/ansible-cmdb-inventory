@@ -17,20 +17,23 @@
   set_fact:
     network_interfaces: "{{ network_interfaces + [
       {
-        'name': item,
-        'mac': hostvars[inventory_hostname]['ansible_' + item].macaddress | default('N/A'),
-        'ipv4': hostvars[inventory_hostname]['ansible_' + item].ipv4 | default({}),
-        'ipv6': hostvars[inventory_hostname]['ansible_' + item].ipv6 | default([]),
-        'active': hostvars[inventory_hostname]['ansible_' + item].active | default(false),
-        'mtu': hostvars[inventory_hostname]['ansible_' + item].mtu | default('N/A'),
-        'speed': hostvars[inventory_hostname]['ansible_' + item].speed | default('N/A'),
-        'type': hostvars[inventory_hostname]['ansible_' + item].type | default('N/A')
+        'name': interface_item,
+        'mac': hostvars[inventory_hostname]['ansible_' + interface_item].macaddress | default('N/A'),
+        'ipv4': hostvars[inventory_hostname]['ansible_' + interface_item].ipv4 | default({}),
+        'ipv6': hostvars[inventory_hostname]['ansible_' + interface_item].ipv6 | default([]),
+        'active': hostvars[inventory_hostname]['ansible_' + interface_item].active | default(false),
+        'mtu': hostvars[inventory_hostname]['ansible_' + interface_item].mtu | default('N/A'),
+        'speed': hostvars[inventory_hostname]['ansible_' + interface_item].speed | default('N/A'),
+        'type': hostvars[inventory_hostname]['ansible_' + interface_item].type | default('N/A')
       }
     ] }}"
   when: 
-    - item != 'lo'
-    - hostvars[inventory_hostname]['ansible_' + item] is defined
+    - interface_item != 'lo'
+    - hostvars[inventory_hostname]['ansible_' + interface_item] is defined
   loop: "{{ ansible_interfaces }}"
+  loop_control:
+    loop_var: interface_item
+    label: "{{ interface_item }}"
 
 - name: Ajouter les interfaces aux informations réseau
   set_fact:

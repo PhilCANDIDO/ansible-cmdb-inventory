@@ -1,139 +1,178 @@
 # roles/cmdb_inventory/tasks/copy_to_repository.yml
 ---
-# Transfert des fichiers temporaires vers le serveur repository
+# Improved version to fix path handling issues and ensure reliable file transfers
 
-- name: (copy_to_repository) Débogage des chemins
+# Afficher les informations de débogage des chemins
+- name: (copy_to_repository) Afficher les informations des chemins et du repository
   debug:
     msg: 
       - "Repository host: {{ cmdb_inventory_repository_host }}"
-      - "Repository dir: {{ cmdb_inventory_repository_dir }}"
-  run_once: true
+      - "Repository directory: {{ cmdb_inventory_repository_dir }}"
+      - "Temporary directory: {{ temp_cmdb_controller }}"
+      - "Inventory hostname: {{ inventory_hostname }}"
+      - "Inventory format: {{ cmdb_output_format }}"
+  run_once: false
+  tags:
+    - debug
 
-# Utiliser une tâche locale pour vérifier si les fichiers existent
-- name: (copy_to_repository) Tâches de vérification locale pour les fichiers
+# Vérifie l'existence des fichiers sur le contrôleur avec des appels find natifs
+- name: (copy_to_repository) Vérifier l'existence des fichiers avec find
+  shell: "find {{ temp_cmdb_controller | quote }} -type f -name '*{{ inventory_hostname }}*' | sort"
+  register: found_files
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  failed_when: false
+  tags:
+    - files
+
+# Afficher les fichiers trouvés (pour faciliter le débogage)
+- name: (copy_to_repository) Afficher les fichiers trouvés sur le contrôleur
+  debug:
+    msg: "Fichiers trouvés: {{ found_files.stdout_lines | default([]) }}"
+  tags:
+    - debug
+
+# Définir l'état des fichiers basé sur le résultat de find
+- name: (copy_to_repository) Définir l'état des fichiers d'inventaire
+  set_fact:
+    inventory_files_found: "{{ found_files.stdout_lines | select('search', inventory_hostname + '.*_cmdb_inventory') | list }}"
+    diagnostic_files_found: "{{ found_files.stdout_lines | select('search', inventory_hostname + '.*_diagnostic') | list }}"
+  tags:
+    - files
+
+# Vérifie si des fichiers ont été trouvés
+- name: (copy_to_repository) Afficher les fichiers d'inventaire spécifiques trouvés
+  debug:
+    msg: 
+      - "Fichiers d'inventaire trouvés: {{ inventory_files_found | length }}"
+      - "Fichiers de diagnostic trouvés: {{ diagnostic_files_found | length }}"
+  tags:
+    - debug
+
+# S'assurer que les répertoires destination existent sur le repository avec des permissions appropriées
+- name: (copy_to_repository) Créer les répertoires sur le repository
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    recurse: yes
+  loop:
+    - "{{ cmdb_inventory_repository_dir }}/reports"
+    - "{{ cmdb_inventory_repository_dir }}/diagnostics"
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  run_once: false
+  become: true  # Utiliser sudo pour s'assurer des permissions
+  ignore_errors: true
+  register: dirs_created
+  tags:
+    - setup
+
+# Afficher le résultat de la création des répertoires
+- name: (copy_to_repository) Afficher le résultat de la création des répertoires
+  debug:
+    msg: "Répertoires créés avec succès: {{ dirs_created is success }}"
+  tags:
+    - debug
+
+# Tester l'accès en écriture sur le repository (pour vérifier les permissions)
+- name: (copy_to_repository) Tester l'accès en écriture sur le repository
+  shell: "touch {{ cmdb_inventory_repository_dir }}/reports/write_test_{{ inventory_hostname }}.tmp && rm -f {{ cmdb_inventory_repository_dir }}/reports/write_test_{{ inventory_hostname }}.tmp"
+  delegate_to: "{{ cmdb_inventory_repository_host }}"
+  become: true
+  register: write_test
+  changed_when: false
+  failed_when: false
+  tags:
+    - test
+
+# Afficher les résultats du test d'écriture
+- name: (copy_to_repository) Afficher les résultats du test d'écriture
+  debug:
+    msg: "Test d'écriture réussi: {{ write_test is success }}"
+  tags:
+    - debug
+
+# Si l'écriture directe est impossible, tenter de copier sur /tmp d'abord
+- name: (copy_to_repository) Définir le répertoire alternatif si le test échoue
+  set_fact:
+    actual_repository_dir: "{{ '/tmp' if not write_test is success else cmdb_inventory_repository_dir }}"
+  tags:
+    - setup
+
+# Afficher le répertoire effectif utilisé
+- name: (copy_to_repository) Afficher le répertoire effectif utilisé
+  debug:
+    msg: "Répertoire repository effectif: {{ actual_repository_dir }}"
+  tags:
+    - debug
+
+# Bloc pour le traitement des fichiers d'inventaire
+- name: (copy_to_repository) Traitement des fichiers d'inventaire
   block:
-    - name: (copy_to_repository) Définir les chemins de fichiers sur le contrôleur Ansible
-      set_fact:
-        controller_temp_dir: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}"
-        controller_inventory_file: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/{{ inventory_hostname }}_cmdb_inventory.{{ cmdb_output_format }}"
-        controller_diagnostic_dir: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/diagnostics"
-        controller_diagnostic_file: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}/diagnostics/{{ inventory_hostname }}_diagnostic.yml"
-
-    - name: (copy_to_repository) Afficher le chemin du fichier d'inventaire
-      debug:
-        msg: "{{ controller_inventory_file }}"
-
-    # Exécuter une commande shell pour vérifier l'existence du fichier plutôt que d'utiliser le module stat
-    - name: (copy_to_repository) Vérifier si le fichier d'inventaire existe sur le contrôleur
-      shell: "test -f {{ controller_inventory_file }} && echo 'exists' || echo 'not_exists'"
-      register: inventory_file_check
-      changed_when: false
+    # Utiliser une boucle sur les fichiers trouvés pour les fichiers d'inventaire
+    - name: (copy_to_repository) Copier les fichiers d'inventaire trouvés vers le repository
+      copy:
+        src: "{{ item }}"
+        dest: "{{ actual_repository_dir }}/reports/{{ item | basename }}"
+        mode: '0644'
+      loop: "{{ inventory_files_found }}"
       delegate_to: localhost
-      become: false
+      register: inventory_copy_result
+      when: inventory_files_found | length > 0
 
-    - name: (copy_to_repository) Définir l'état du fichier d'inventaire
-      set_fact:
-        inventory_file_exists: "{{ inventory_file_check.stdout == 'exists' }}"
-
-    - name: (copy_to_repository) Afficher l'état du fichier d'inventaire
-      debug:
-        msg: "Le fichier d'inventaire {{ 'existe' if inventory_file_exists else 'n''existe pas' }}"
-
-    # Vérifier le répertoire de diagnostics avec shell
-    - name: (copy_to_repository) Vérifier si le répertoire de diagnostics existe sur le contrôleur
-      shell: "test -d {{ controller_diagnostic_dir }} && echo 'exists' || echo 'not_exists'"
-      register: diagnostic_dir_check
-      changed_when: false
-      delegate_to: localhost
-      become: false
-      when: cmdb_collect.self_diagnostic | default(true) | bool
-
-    - name: (copy_to_repository) Définir l'état du répertoire de diagnostics
-      set_fact:
-        diagnostic_dir_exists: "{{ diagnostic_dir_check.stdout == 'exists' if diagnostic_dir_check is defined else false }}"
-      when: cmdb_collect.self_diagnostic | default(true) | bool
-
-    # Vérifier le fichier de diagnostic avec shell
-    - name: (copy_to_repository) Vérifier si le fichier de diagnostic existe sur le contrôleur
-      shell: "test -f {{ controller_diagnostic_file }} && echo 'exists' || echo 'not_exists'"
-      register: diagnostic_file_check
-      changed_when: false
-      delegate_to: localhost
-      become: false
+    # Si le répertoire alternatif est utilisé, déplacer les fichiers vers l'emplacement final
+    - name: (copy_to_repository) Déplacer les fichiers d'inventaire du répertoire temporaire vers le répertoire final
+      shell: "cp {{ actual_repository_dir }}/reports/{{ item | basename }} {{ cmdb_inventory_repository_dir }}/reports/"
+      loop: "{{ inventory_files_found }}"
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
+      become: true
+      register: inventory_move_result
       when: 
-        - cmdb_collect.self_diagnostic | default(true) | bool
-        - diagnostic_dir_exists | default(false)
-
-    - name: (copy_to_repository) Définir l'état du fichier de diagnostic
-      set_fact:
-        diagnostic_file_exists: "{{ diagnostic_file_check.stdout == 'exists' if diagnostic_file_check is defined else false }}"
-      when: cmdb_collect.self_diagnostic | default(true) | bool
-
-    - name: (copy_to_repository) Afficher le chemin du fichier diagnostic
+        - actual_repository_dir != cmdb_inventory_repository_dir
+        - inventory_files_found | length > 0
+  rescue:
+    - name: (copy_to_repository) Signaler l'échec de la copie des fichiers d'inventaire
       debug:
-        msg: "{{ controller_diagnostic_file }} - {{ 'existe' if diagnostic_file_exists | default(false) else 'n''existe pas' }}"
-      when: cmdb_collect.self_diagnostic | default(true) | bool
+        msg: "Échec de la copie des fichiers d'inventaire. Vérifiez les permissions et les chemins."
+  when: inventory_files_found | length > 0
+  tags:
+    - copy_inventory
 
-  delegate_to: localhost
-  become: false
-  connection: local
+# Bloc pour le traitement des fichiers de diagnostic
+- name: (copy_to_repository) Traitement des fichiers de diagnostic
+  block:
+    # Utiliser une boucle sur les fichiers trouvés pour les fichiers de diagnostic
+    - name: (copy_to_repository) Copier les fichiers de diagnostic trouvés vers le repository
+      copy:
+        src: "{{ item }}"
+        dest: "{{ actual_repository_dir }}/diagnostics/{{ item | basename }}"
+        mode: '0644'
+      loop: "{{ diagnostic_files_found }}"
+      delegate_to: localhost
+      register: diagnostic_copy_result
+      when: diagnostic_files_found | length > 0
 
-# Créer les répertoires de destination sur le repository
-- name: (copy_to_repository) Créer le répertoire reports sur le serveur repository si nécessaire
-  file:
-    path: "{{ cmdb_inventory_repository_dir }}/reports"
-    state: directory
-    mode: '0755'
-    owner: "{{ ansible_user | default('ansible') }}"
-    group: "{{ ansible_user | default('ansible') }}"
-  delegate_to: "{{ cmdb_inventory_repository_host }}"
-  become: true
-  run_once: true
-  ignore_errors: true
-  when: inventory_file_exists | default(false)
+    # Si le répertoire alternatif est utilisé, déplacer les fichiers vers l'emplacement final
+    - name: (copy_to_repository) Déplacer les fichiers de diagnostic du répertoire temporaire vers le répertoire final
+      shell: "cp {{ actual_repository_dir }}/diagnostics/{{ item | basename }} {{ cmdb_inventory_repository_dir }}/diagnostics/"
+      loop: "{{ diagnostic_files_found }}"
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
+      become: true
+      register: diagnostic_move_result
+      when: 
+        - actual_repository_dir != cmdb_inventory_repository_dir
+        - diagnostic_files_found | length > 0
+  rescue:
+    - name: (copy_to_repository) Signaler l'échec de la copie des fichiers de diagnostic
+      debug:
+        msg: "Échec de la copie des fichiers de diagnostic. Vérifiez les permissions et les chemins."
+  when: diagnostic_files_found | length > 0
+  tags:
+    - copy_diagnostic
 
-# Copier le fichier d'inventaire avec une tâche shell déléguée
-- name: (copy_to_repository) Copier le fichier d'inventaire vers le repository
-  shell: "cp {{ controller_inventory_file }} {{ cmdb_inventory_repository_dir }}/reports/{{ inventory_hostname }}_cmdb_inventory.{{ cmdb_output_format }}"
-  delegate_to: localhost
-  become: false
-  ignore_errors: true
-  changed_when: true
-  when: inventory_file_exists | default(true) or force_copy_files | default(false)
-  register: copy_result
-  connection: local
-
-# Créer le répertoire diagnostics sur le serveur repository si nécessaire
-- name: (copy_to_repository) Créer le répertoire diagnostics sur le serveur repository si nécessaire
-  file:
-    path: "{{ cmdb_inventory_repository_dir }}/diagnostics"
-    state: directory
-    mode: '0755'
-    owner: "{{ ansible_user | default('ansible') }}"
-    group: "{{ ansible_user | default('ansible') }}"
-  delegate_to: "{{ cmdb_inventory_repository_host }}"
-  become: true
-  run_once: true
-  ignore_errors: true
-  when: 
-    - cmdb_collect.self_diagnostic | default(true) | bool
-    - diagnostic_file_exists | default(false)
-
-# Copier le fichier de diagnostic avec une tâche shell déléguée
-- name: (copy_to_repository) Copier le fichier de diagnostic vers le repository
-  shell: "cp {{ controller_diagnostic_file }} {{ cmdb_inventory_repository_dir }}/diagnostics/{{ inventory_hostname }}_diagnostic.yml"
-  delegate_to: localhost
-  become: false
-  ignore_errors: true
-  changed_when: true
-  when: 
-    - cmdb_collect.self_diagnostic | default(true) | bool
-    - diagnostic_file_exists | default(false)
-  register: diag_copy_result
-  connection: local
-
-# Journaliser l'achèvement du transfert
-- name: (copy_to_repository) Journaliser l'achèvement du transfert dans le repository
+# Journaliser le succès du transfert
+- name: (copy_to_repository) Journaliser le succès du transfert
   lineinfile:
     path: "{{ cmdb_inventory_repository_dir }}/inventaire_success.log"
     line: "{{ inventory_hostname }} - {{ ansible_date_time.iso8601 | default(now()) }}"
@@ -141,11 +180,19 @@
   delegate_to: "{{ cmdb_inventory_repository_host }}"
   become: true
   ignore_errors: true
-  when: copy_result is success
+  when: 
+    - (inventory_files_found | length > 0 and inventory_copy_result is defined and inventory_copy_result is success) or
+      (force_copy_files | default(false))
+  tags:
+    - log
 
-# Enregistrer les informations sur ce transfert
-- name: (copy_to_repository) Enregistrer les métadonnées de ce transfert
-  set_fact:
-    cmdb_inventory_transferred: true
-    cmdb_inventory_transfer_time: "{{ ansible_date_time.iso8601 | default(now()) }}"
-  when: copy_result is success
+# Résumé des opérations effectuées
+- name: (copy_to_repository) Résumé des opérations
+  debug:
+    msg: 
+      - "Résumé du transfert pour {{ inventory_hostname }}"
+      - "Fichiers d'inventaire traités: {{ inventory_files_found | length }}"
+      - "Fichiers de diagnostic traités: {{ diagnostic_files_found | length }}"
+      - "Répertoire utilisé: {{ actual_repository_dir }}"
+  tags:
+    - summary

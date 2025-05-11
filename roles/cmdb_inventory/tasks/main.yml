@@ -161,32 +161,98 @@
   when: remote_dir_creation is success
   
 # Étape 1: Récupérer les rapports CMDB vers un dossier temporaire sur le contrôleur
-- name: (main) Déterminer le dossier temporaire sur le node controleur
+
+# Déterminer le dossier temporaire sur le node contrôleur avec date formatée sans espace ni caractères spéciaux
+- name: (main) Déterminer le dossier temporaire sur le node contrôleur
   set_fact:
-    temp_cmdb_controller: "/tmp/cmdb_temp_{{ ansible_date_time.date | default('now') | replace('-', '') }}"
+    temp_cmdb_controller: "/tmp/cmdb_temp_{{ ansible_date_time.date | default(lookup('pipe', 'date +%Y%m%d')) | replace('-', '') }}"
+  tags:
+    - fetch
+    - always
 
-- name: (main) Afficher le nom du dossier temporaire sur le node controleur
+# Créer le répertoire temporaire s'il n'existe pas déjà
+- name: (main) Créer le répertoire temporaire sur le node contrôleur
+  file:
+    path: "{{ temp_cmdb_controller }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  run_once: false  # Exécuter pour chaque serveur
+  tags:
+    - fetch
+    - always
+
+# Créer le sous-répertoire diagnostics
+- name: (main) Créer le sous-répertoire diagnostics sur le node contrôleur
+  file:
+    path: "{{ temp_cmdb_controller }}/diagnostics"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+  run_once: false  # Exécuter pour chaque serveur
+  tags:
+    - fetch
+    - always
+
+# Afficher le nom du dossier temporaire sur le node contrôleur
+- name: (main) Afficher le nom du dossier temporaire sur le node contrôleur
   debug:
-    msg: "Temp cmdb controller : {{ temp_cmdb_controller }}"
+    msg: "Temp cmdb controller: {{ temp_cmdb_controller }}"
+  tags:
+    - fetch
+    - debug
 
+# Récupérer les rapports CMDB dans un dossier temporaire du contrôleur avec gestion explicite des erreurs
 - name: (main) Récupérer les rapports CMDB dans un dossier temporaire du contrôleur
-  fetch:
-    src: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
-    dest: "{{ temp_cmdb_controller }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
-    flat: yes
-  ignore_errors: true
+  block:
+    - name: Vérifier l'existence du fichier d'inventaire sur le serveur cible
+      stat:
+        path: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+      register: inventory_file_check
+      
+    - name: Récupérer le fichier d'inventaire s'il existe
+      fetch:
+        src: "{{ cmdb_inventory_remote_dir }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+        dest: "{{ temp_cmdb_controller }}/{{ ansible_hostname | default(inventory_hostname) }}_cmdb_inventory.{{ cmdb_output_format }}"
+        flat: yes
+      when: inventory_file_check.stat.exists | default(false)
+      register: fetch_result
+  rescue:
+    - name: Signaler l'échec de la récupération du fichier d'inventaire
+      debug:
+        msg: "Échec de la récupération du fichier d'inventaire pour {{ inventory_hostname }}"
   when: remote_dir_creation is success
+  tags:
+    - fetch
+    - inventory
 
-# Récupérer les diagnostics aussi si activés
+# Récupérer les diagnostics aussi si activés avec une meilleure gestion des erreurs
 - name: (main) Récupérer les diagnostics dans un dossier temporaire du contrôleur
-  fetch:
-    src: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
-    dest: "{{ temp_cmdb_controller }}/diagnostics/{{ ansible_hostname | default(inventory_hostname) }}_diagnostic.yml"
-    flat: yes
-  ignore_errors: true
+  block:
+    - name: Vérifier l'existence du fichier de diagnostic sur le serveur cible
+      stat:
+        path: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+      register: diagnostic_file_check
+      
+    - name: Récupérer le fichier de diagnostic s'il existe
+      fetch:
+        src: "{{ cmdb_inventory_remote_dir }}/diagnostic.yml"
+        dest: "{{ temp_cmdb_controller }}/diagnostics/{{ ansible_hostname | default(inventory_hostname) }}_diagnostic.yml"
+        flat: yes
+      when: diagnostic_file_check.stat.exists | default(false)
+      register: diagnostic_fetch_result
+  rescue:
+    - name: Signaler l'échec de la récupération du fichier de diagnostic
+      debug:
+        msg: "Échec de la récupération du fichier de diagnostic pour {{ inventory_hostname }}"
   when: 
-    - remote_dir_creation is success
+    - remote_dir_creation is success 
     - cmdb_collect.self_diagnostic | default(true) | bool
+  tags:
+    - fetch
+    - diagnostic
 
 # Nettoyer le répertoire temporaire sur les serveurs cibles
 - name: (main) Nettoyer le répertoire temporaire

@@ -15,14 +15,15 @@
       failed_when: false
 
     - name: Analyser les certificats trouvés
-      shell: "openssl x509 -noout -subject -issuer -dates -in {{ item.path }}"
+      shell: "openssl x509 -noout -subject -issuer -dates -in {{ cert_item.path }}"
       register: cert_details
       with_items: "{{ cert_files.files }}"
       when: cert_files.matched > 0
       failed_when: false
       changed_when: false
       loop_control:
-        label: "{{ item.path }}"
+        loop_var: cert_item
+        label: "{{ cert_item.path }}"
 
     - name: Ajouter les informations sur les certificats
       set_fact:
