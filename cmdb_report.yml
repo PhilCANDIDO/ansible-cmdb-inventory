@@ -3,9 +3,8 @@
 # Usage: ansible-playbook -i inventory/dev/inventory.ini cmdb_report.yml --vault-password-file=.vault_pass
 
 - name: Générer et envoyer le rapport CMDB
-  hosts: localhost
+  hosts: cmdb_repository
   gather_facts: true
-  become: false
   
   vars:
     # Configuration commune - UTILISER /tmp au lieu du répertoire home pour éviter les problèmes de permissions
