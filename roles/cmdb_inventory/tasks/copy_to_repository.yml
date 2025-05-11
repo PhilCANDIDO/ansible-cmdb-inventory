@@ -185,7 +185,7 @@
         dest: "{{ actual_repository_dir }}/reports/{{ item | basename }}"
         mode: '0644'
       loop: "{{ inventory_files_found }}"
-      delegate_to: localhost
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
       register: inventory_copy_result
       when: inventory_files_found | length > 0
 
@@ -217,7 +217,7 @@
         dest: "{{ actual_repository_dir }}/diagnostics/{{ item | basename }}"
         mode: '0644'
       loop: "{{ diagnostic_files_found }}"
-      delegate_to: localhost
+      delegate_to: "{{ cmdb_inventory_repository_host }}"
       register: diagnostic_copy_result
       when: diagnostic_files_found | length > 0
 
