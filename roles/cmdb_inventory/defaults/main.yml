@@ -31,6 +31,9 @@ cmdb_output_format: "json"  # Options: json, yaml, csv
 # Nettoyage des fichiers temporaires après exécution
 cmdb_inventory_cleanup: true
 
+# Variables pour forcer la copie des fichiers d'inventaire et de diagnostic
+force_copy_files: true
+
 # Informations à collecter (peut être personnalisé pour cibler des éléments spécifiques)
 cmdb_collect:
   hardware: true
