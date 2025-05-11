@@ -30,19 +30,6 @@
         - always
         - debug
     
-    # Installer les dépendances Python nécessaires (avec become pour les permissions)
-    - name: Installer les dépendances Python nécessaires
-      pip:
-        name:
-          - openpyxl>=3.0.0
-          - jmespath>=0.10.0
-        state: present
-      become: true
-      ignore_errors: true
-      tags:
-        - setup
-        - dependencies
-  
   roles:
     - role: cmdb_report
       vars:
