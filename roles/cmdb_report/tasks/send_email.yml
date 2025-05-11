@@ -6,8 +6,7 @@
   stat:
     path: "{{ cmdb_report_excel_path }}"
   register: excel_file_stat
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - email
     - check
@@ -25,8 +24,7 @@
   template:
     src: email_body.j2
     dest: "{{ cmdb_report.temp_dir }}/email_body.{% if cmdb_email.body_type == 'html' %}html{% else %}txt{% endif %}"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - email
     - template
@@ -46,8 +44,7 @@
     body: "{{ lookup('file', cmdb_report.temp_dir + '/email_body.' + ('html' if cmdb_email.body_type == 'html' else 'txt')) }}"
     attach: "{{ [cmdb_report_excel_path] if cmdb_email.attach_report else omit }}"
     subtype: "{{ 'html' if cmdb_email.body_type == 'html' else 'plain' }}"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   register: email_result
   tags:
     - email
@@ -69,7 +66,6 @@
     line: "{{ ansible_date_time.iso8601 }} - Rapport envoyé à {{ cmdb_email.to | join(', ') }}"
     create: yes
   delegate_to: "{{ cmdb_manager_host }}"
-  become: false
   ignore_errors: true
   when: email_result is success
   tags:

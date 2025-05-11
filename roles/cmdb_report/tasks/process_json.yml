@@ -6,8 +6,7 @@
   slurp:
     src: "{{ cmdb_report.temp_dir }}/json/{{ json_file.path | basename }}"
   register: json_content
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - process
     - read
@@ -16,8 +15,7 @@
 - name: (process_json) Parser le contenu JSON
   set_fact:
     json_data: "{{ json_content['content'] | b64decode | from_json }}"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - process
     - parse
@@ -26,8 +24,7 @@
 - name: (process_json) Ajouter les données au tableau global
   set_fact:
     cmdb_data: "{{ cmdb_data + [json_data] }}"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - process
     - add
@@ -50,8 +47,7 @@
       'critical_servers': cmdb_stats.critical_servers | default(0) + (1 if json_data.organizational.criticality == 'Critique' else 0),
       'expired_certs': cmdb_stats.expired_certs | default(0) + (json_data.security.certificates.details | selectattr('stdout', 'search', 'notAfter') | selectattr('stdout', 'search', '2024') | list | length)
     }) }}"
-  delegate_to: localhost
-  become: false
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - process
     - stats

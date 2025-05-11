@@ -7,7 +7,7 @@
     gather_subset:
       - '!all'
       - 'distribution'
-  delegate_to: {{ cmdb_manager_host }}
+  delegate_to: "{{ cmdb_manager_host }}"
   tags:
     - validate
     - os_check
@@ -19,7 +19,7 @@
       - python3-venv
       - python3-full
     state: present
-  delegate_to: {{ cmdb_manager_host }}
+  delegate_to: "{{ cmdb_manager_host }}"
   when: ansible_os_family == "Debian"
   ignore_errors: true
   register: venv_packages_debian
@@ -33,7 +33,7 @@
       - python3
       - python3-devel
     state: present
-  delegate_to: {{ cmdb_manager_host }}
+  delegate_to: "{{ cmdb_manager_host }}"
   when: ansible_os_family == "RedHat"
   ignore_errors: true
   register: venv_packages_redhat
@@ -47,7 +47,7 @@
       - python3
       - python3-devel
     state: present
-  delegate_to: {{ cmdb_manager_host }}
+  delegate_to: "{{ cmdb_manager_host }}"
   when: ansible_os_family == "Suse"
   ignore_errors: true
   register: venv_packages_suse
@@ -61,7 +61,7 @@
     path: "{{ cmdb_report.temp_dir }}"
     state: directory
     mode: '0755'
-  delegate_to: {{ cmdb_manager_host }}
+  delegate_to: "{{ cmdb_manager_host }}"
   register: temp_dir_creation
   tags:
     - validate
@@ -84,7 +84,7 @@
   with_items:
     - 'json'
     - 'python'
-  delegate_to: {{ cmdb_manager_host }}
+  delegate_to: "{{ cmdb_manager_host }}"
   become: false
   tags:
     - validate
@@ -93,7 +93,7 @@
 # Vérifier la connectivité avec le serveur repository
 - name: (validate) Vérifier la connectivité avec le serveur repository (ping)
   ping:
-  delegate_to: "{{ cmdb_manager_host }}"
+  delegate_to: ""{{ cmdb_manager_host }}""
   register: repository_ping
   ignore_errors: true
   when: cmdb_repository_mode == 'manager'
@@ -106,7 +106,7 @@
 - name: (validate) Afficher un avertissement si le serveur repository n'est pas accessible
   debug:
     msg: >-
-      AVERTISSEMENT: Le serveur repository '{{ cmdb_manager_host }}' n'est pas accessible.
+      AVERTISSEMENT: Le serveur repository '"{{ cmdb_manager_host }}"' n'est pas accessible.
       Le mode repository sera automatiquement changé en mode 'local'.
   when: 
     - cmdb_repository_mode == 'manager'
@@ -134,7 +134,7 @@
   stat:
     path: "{{ cmdb_repository.directory }}/reports"
   register: repository_dir_stat
-  delegate_to: "{{ cmdb_manager_host }}"
+  delegate_to: ""{{ cmdb_manager_host }}""
   ignore_errors: true
   tags:
     - validate
@@ -164,7 +164,7 @@
   copy:
     content: "Test d'écriture pour le rapport CMDB - {{ ansible_date_time.iso8601 }}"
     dest: "{{ cmdb_repository.directory }}/reports/write_test.txt"
-  delegate_to: "{{ cmdb_manager_host }}"
+  delegate_to: ""{{ cmdb_manager_host }}""
   become: false
   register: write_test
   ignore_errors: true
@@ -178,7 +178,7 @@
   file:
     path: "{{ cmdb_repository.directory }}/reports/write_test.txt"
     state: absent
-  delegate_to: "{{ cmdb_manager_host }}"
+  delegate_to: ""{{ cmdb_manager_host }}""
   become: false
   when: write_test is success
   ignore_errors: true
@@ -192,7 +192,7 @@
   debug:
     msg: >-
       ERREUR: Impossible d'écrire dans le répertoire repository 
-      '{{ cmdb_repository.directory }}/reports' sur le serveur '{{ cmdb_manager_host }}'.
+      '{{ cmdb_repository.directory }}/reports' sur le serveur '"{{ cmdb_manager_host }}"'.
       Vérifiez les permissions ou utilisez un autre répertoire.
   when: write_test is failed
   tags:
@@ -205,7 +205,7 @@
   fail:
     msg: >-
       Impossible d'accéder au répertoire repository '{{ cmdb_repository.directory }}/reports' 
-      sur le serveur '{{ cmdb_manager_host }}'. Vérifiez que le répertoire existe 
+      sur le serveur '"{{ cmdb_manager_host }}"'. Vérifiez que le répertoire existe 
       et que les permissions sont correctes.
   when: 
     - not repository_dir_stat.stat.exists | default(false)
