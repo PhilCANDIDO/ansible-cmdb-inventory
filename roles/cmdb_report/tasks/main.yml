@@ -10,16 +10,7 @@
 
 - name: (main) Déterminer le serveur manager
   set_fact:
-    cmdb_manager_host: >-
-      {% if cmdb_repository_mode == 'manager' and cmdb_repository.manager_group is defined %}
-        {% if cmdb_repository.manager_group in groups and groups[cmdb_repository.manager_group] | length > 0 %}
-          {{ groups[cmdb_repository.manager_group][0] }}
-        {% else %}
-          localhost
-        {% endif %}
-      {% else %}
-        localhost
-      {% endif %}
+    cmdb_manager_host: "{{ groups[cmdb_repository.manager_group][0] if (cmdb_repository_mode == 'manager' and cmdb_repository.manager_group is defined and cmdb_repository.manager_group in groups and groups[cmdb_repository.manager_group] | length > 0) else 'localhost' }}"
   tags:
     - always
 
