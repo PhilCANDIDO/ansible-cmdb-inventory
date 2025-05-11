@@ -2,7 +2,7 @@
 # tasks/process_json.yml - Traitement d'un fichier JSON individuel
 
 # Charger et parser le contenu du fichier JSON
-- name: Lire et parser le fichier JSON {{ json_file.path | basename }}
+- name: (process_json) Lire et parser le fichier JSON {{ json_file.path | basename }}
   slurp:
     src: "{{ cmdb_report.temp_dir }}/json/{{ json_file.path | basename }}"
   register: json_content
@@ -13,7 +13,7 @@
     - read
 
 # Parser le contenu JSON et extraire les informations nécessaires
-- name: Parser le contenu JSON
+- name: (process_json) Parser le contenu JSON
   set_fact:
     json_data: "{{ json_content['content'] | b64decode | from_json }}"
   delegate_to: localhost
@@ -23,7 +23,7 @@
     - parse
 
 # Ajouter les données traitées à la liste globale
-- name: Ajouter les données au tableau global
+- name: (process_json) Ajouter les données au tableau global
   set_fact:
     cmdb_data: "{{ cmdb_data + [json_data] }}"
   delegate_to: localhost
@@ -33,7 +33,7 @@
     - add
 
 # Extraire des informations supplémentaires pour faciliter le traitement
-- name: Extraire les statistiques globales
+- name: (process_json) Extraire les statistiques globales
   set_fact:
     cmdb_stats: "{{ cmdb_stats | default({}) | combine({
       'total_servers': (cmdb_stats.total_servers | default(0)) + 1,

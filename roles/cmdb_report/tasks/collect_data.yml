@@ -2,7 +2,7 @@
 # tasks/collect_data.yml - Collecte des données JSON pour la génération du rapport
 
 # Rechercher tous les fichiers JSON dans le répertoire repository
-- name: Rechercher les fichiers d'inventaire JSON
+- name: (collect_data) Rechercher les fichiers d'inventaire JSON
   find:
     paths: "{{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports"
     patterns: "*_cmdb_inventory.json"
@@ -14,7 +14,7 @@
     - collect
     - find
 
-- name: Afficher le nombre de fichiers JSON trouvés
+- name: (collect_data) Afficher le nombre de fichiers JSON trouvés
   debug:
     msg: "{{ json_files.files | length }} fichiers JSON d'inventaire trouvés dans {{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports"
   tags:
@@ -22,7 +22,7 @@
     - debug
 
 # Gérer le cas où aucun fichier JSON n'est trouvé
-- name: Vérifier si des fichiers ont été trouvés
+- name: (collect_data) Vérifier si des fichiers ont été trouvés
   fail:
     msg: >-
       Aucun fichier JSON d'inventaire trouvé dans {{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports
@@ -33,7 +33,7 @@
     - check
 
 # Utiliser directement les fichiers trouvés sans filtrage par date pour éviter les problèmes
-- name: Conserver tous les fichiers JSON trouvés
+- name: (collect_data) Conserver tous les fichiers JSON trouvés
   set_fact:
     cmdb_files: "{{ json_files.files }}"
   when: json_files.files is defined and json_files.files | length > 0
@@ -42,7 +42,7 @@
     - filter
 
 # Limiter le nombre de fichiers si nécessaire
-- name: Limiter le nombre de fichiers si requis
+- name: (collect_data) Limiter le nombre de fichiers si requis
   set_fact:
     cmdb_files: "{{ cmdb_files[:cmdb_report.server_limit | int] }}"
   when: 
@@ -53,7 +53,7 @@
     - collect
     - limit
 
-- name: Afficher le nombre de fichiers JSON finaux
+- name: (collect_data) Afficher le nombre de fichiers JSON finaux
   debug:
     msg: "{{ cmdb_files | length }} fichiers JSON d'inventaire finalement retenus (server_limit: {{ cmdb_report.server_limit }})"
   when: cmdb_files is defined
@@ -62,7 +62,7 @@
     - debug
 
 # Créer le répertoire pour les fichiers JSON avec des permissions larges
-- name: Créer le répertoire pour les fichiers JSON avec des permissions larges
+- name: (collect_data) Créer le répertoire pour les fichiers JSON avec des permissions larges
   file:
     path: "{{ cmdb_report.temp_dir }}/json"
     state: directory
@@ -75,7 +75,7 @@
     - setup
 
 # Copier les fichiers JSON vers le répertoire temporaire en utilisant une nouvelle approche
-- name: Copier les fichiers JSON vers le répertoire temporaire (alternative)
+- name: (collect_data) Copier les fichiers JSON vers le répertoire temporaire (alternative)
   shell: "cat {{ item.path }} > {{ cmdb_report.temp_dir }}/json/{{ item.path | basename }}"
   loop: "{{ cmdb_files }}"
   loop_control:
@@ -88,7 +88,7 @@
     - copy
 
 # Afficher des informations sur les fichiers copiés
-- name: Afficher des informations sur les fichiers copiés
+- name: (collect_data) Afficher des informations sur les fichiers copiés
   debug:
     msg: "Fichiers JSON copiés dans {{ cmdb_report.temp_dir }}/json/"
   when: json_copy_result is success
@@ -97,7 +97,7 @@
     - debug
 
 # Vérifier que tous les fichiers ont été correctement copiés
-- name: Vérifier les fichiers copiés
+- name: (collect_data) Vérifier les fichiers copiés
   find:
     paths: "{{ cmdb_report.temp_dir }}/json"
     patterns: "*.json"
@@ -110,7 +110,7 @@
     - verify
 
 # Afficher le nombre de fichiers correctement copiés
-- name: Afficher le nombre de fichiers correctement copiés
+- name: (collect_data) Afficher le nombre de fichiers correctement copiés
   debug:
     msg: "{{ copied_files.files | length }} fichiers JSON ont été correctement copiés"
   when: copied_files is defined
@@ -119,7 +119,7 @@
     - verify
 
 # Initialiser la liste des données CMDB
-- name: Initialiser la liste des données CMDB
+- name: (collect_data) Initialiser la liste des données CMDB
   set_fact:
     cmdb_data: []
     cmdb_stats: {}
@@ -131,7 +131,7 @@
     - parse
 
 # Ajouter les données de chaque fichier JSON
-- name: Ajouter les données de chaque fichier JSON
+- name: (collect_data) Ajouter les données de chaque fichier JSON
   include_tasks: process_json.yml
   loop: "{{ cmdb_files }}"
   loop_control:
@@ -143,7 +143,7 @@
     - parse
 
 # Afficher les statistiques après traitement
-- name: Afficher les statistiques après traitement
+- name: (collect_data) Afficher les statistiques après traitement
   debug:
     msg: 
       - "Nombre total de serveurs traités: {{ cmdb_data | length }}"

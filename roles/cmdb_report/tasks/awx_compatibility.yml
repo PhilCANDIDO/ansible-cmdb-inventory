@@ -1,0 +1,27 @@
+---
+# Tâches spécifiques pour la compatibilité avec AWX
+- name: (awx_compatibility) Détecter l'environnement AWX
+  set_fact:
+    is_awx_environment: "{{ lookup('env', 'AWX_PRIVATE_DATA_DIR') != '' }}"
+
+- name: (awx_compatibility) Configurer les variables pour l'environnement AWX
+  set_fact:
+    ansible_user_id: "runner"
+    ansible_user: "runner" 
+    use_sudo_for_directories: false
+    cmdb_inventory_cleanup: true
+    force_copy_files: true
+  when: is_awx_environment | bool
+
+- name: (awx_compatibility) Créer les répertoires nécessaires avec permissions AWX
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "{{ cmdb_repository.directory }}"
+    - "{{ cmdb_repository.directory }}/reports"
+    - "{{ cmdb_repository.directory }}/diagnostics"
+  delegate_to: localhost
+  become: false
+  when: is_awx_environment | bool

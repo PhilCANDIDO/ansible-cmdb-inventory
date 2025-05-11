@@ -2,7 +2,7 @@
 # tasks/send_email.yml - Envoi du rapport par email
 
 # Vérifier si le rapport Excel existe
-- name: Vérifier si le rapport Excel existe
+- name: (send_email) Vérifier si le rapport Excel existe
   stat:
     path: "{{ cmdb_report_excel_path }}"
   register: excel_file_stat
@@ -12,7 +12,7 @@
     - email
     - check
 
-- name: Interrompre si le rapport n'existe pas
+- name: (send_email) Interrompre si le rapport n'existe pas
   fail:
     msg: "Le rapport Excel n'existe pas à l'emplacement {{ cmdb_report_excel_path }}"
   when: not excel_file_stat.stat.exists
@@ -21,7 +21,7 @@
     - check
 
 # Créer le corps du message à partir du template
-- name: Créer le corps du message email
+- name: (send_email) Créer le corps du message email
   template:
     src: email_body.j2
     dest: "{{ cmdb_report.temp_dir }}/email_body.{% if cmdb_email.body_type == 'html' %}html{% else %}txt{% endif %}"
@@ -32,7 +32,7 @@
     - template
 
 # Envoyer l'email avec le module mail intégré d'Ansible
-- name: Envoyer le rapport par email
+- name: (send_email) Envoyer le rapport par email
   mail:
     host: "{{ cmdb_email.smtp.host }}"
     port: "{{ cmdb_email.smtp.port }}"
@@ -54,7 +54,7 @@
     - send
 
 # Afficher le résultat de l'envoi de l'email
-- name: Afficher le résultat de l'envoi de l'email
+- name: (send_email) Afficher le résultat de l'envoi de l'email
   debug:
     msg: "Email envoyé avec succès à {{ cmdb_email.to | join(', ') }}"
   when: email_result is success
@@ -63,7 +63,7 @@
     - debug
 
 # Journaliser l'envoi de l'email dans un fichier de log
-- name: Journaliser l'envoi de l'email
+- name: (send_email) Journaliser l'envoi de l'email
   lineinfile:
     path: "{{ cmdb_repository.directory }}/email_logs.txt"
     line: "{{ ansible_date_time.iso8601 }} - Rapport envoyé à {{ cmdb_email.to | join(', ') }}"

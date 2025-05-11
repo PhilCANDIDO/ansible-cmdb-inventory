@@ -2,7 +2,7 @@
 # tasks/validate.yml - Validation des prérequis pour la génération du rapport
 
 # Vérifier la famille de distribution Linux pour adapter les commandes d'installation
-- name: Obtenir les informations de la distribution
+- name: (validate) Obtenir les informations de la distribution
   setup:
     gather_subset:
       - '!all'
@@ -14,7 +14,7 @@
     - os_check
 
 # Installer les packages nécessaires pour l'environnement virtuel selon la distribution
-- name: Installer les packages nécessaires pour les environnements virtuels (Debian/Ubuntu)
+- name: (validate) Installer les packages nécessaires pour les environnements virtuels (Debian/Ubuntu)
   apt:
     name:
       - python3-venv
@@ -29,7 +29,7 @@
     - validate
     - dependencies
 
-- name: Installer les packages nécessaires pour les environnements virtuels (RedHat/CentOS)
+- name: (validate) Installer les packages nécessaires pour les environnements virtuels (RedHat/CentOS)
   yum:
     name:
       - python3
@@ -44,7 +44,7 @@
     - validate
     - dependencies
 
-- name: Installer les packages nécessaires pour les environnements virtuels (SUSE)
+- name: (validate) Installer les packages nécessaires pour les environnements virtuels (SUSE)
   zypper:
     name:
       - python3
@@ -60,7 +60,7 @@
     - dependencies
 
 # Créer le répertoire temporaire pour le traitement
-- name: Créer le répertoire temporaire pour le traitement
+- name: (validate) Créer le répertoire temporaire pour le traitement
   file:
     path: "{{ cmdb_report.temp_dir }}"
     state: directory
@@ -72,7 +72,7 @@
     - validate
     - tempdir
 
-- name: Échec si le répertoire temporaire ne peut pas être créé
+- name: (validate) Échec si le répertoire temporaire ne peut pas être créé
   fail:
     msg: "Impossible de créer le répertoire temporaire '{{ cmdb_report.temp_dir }}' sur localhost."
   when: temp_dir_creation is failed
@@ -81,7 +81,7 @@
     - tempdir
 
 # Créer des sous-répertoires dans le répertoire temporaire
-- name: Créer des sous-répertoires dans le répertoire temporaire
+- name: (validate) Créer des sous-répertoires dans le répertoire temporaire
   file:
     path: "{{ cmdb_report.temp_dir }}/{{ item }}"
     state: directory
@@ -96,7 +96,7 @@
     - tempdir
 
 # Vérifier la connectivité avec le serveur repository
-- name: Vérifier la connectivité avec le serveur repository (ping)
+- name: (validate) Vérifier la connectivité avec le serveur repository (ping)
   ping:
   delegate_to: "{{ cmdb_manager_host }}"
   register: repository_ping
@@ -108,7 +108,7 @@
     - connectivity
 
 # Afficher un message d'avertissement si le serveur repository n'est pas accessible
-- name: Afficher un avertissement si le serveur repository n'est pas accessible
+- name: (validate) Afficher un avertissement si le serveur repository n'est pas accessible
   debug:
     msg: >-
       AVERTISSEMENT: Le serveur repository '{{ cmdb_manager_host }}' n'est pas accessible.
@@ -122,7 +122,7 @@
     - connectivity
 
 # Redéfinir le mode repository si le serveur n'est pas accessible
-- name: Redéfinir le mode repository en mode local si le serveur n'est pas accessible
+- name: (validate) Redéfinir le mode repository en mode local si le serveur n'est pas accessible
   set_fact:
     cmdb_repository_mode: "local"
     cmdb_manager_host: "localhost"
@@ -135,7 +135,7 @@
     - connectivity
 
 # Vérifier l'existence du répertoire repository sur le serveur
-- name: Vérifier l'accès au répertoire repository
+- name: (validate) Vérifier l'accès au répertoire repository
   stat:
     path: "{{ cmdb_repository.directory }}/reports"
   register: repository_dir_stat
@@ -147,7 +147,7 @@
     - repository
 
 # Créer les répertoires repository si nécessaire (mode local uniquement)
-- name: Créer les répertoires repository si nécessaire (local)
+- name: (validate) Créer les répertoires repository si nécessaire (local)
   file:
     path: "{{ item }}"
     state: directory
@@ -167,7 +167,7 @@
     - repository
 
 # Tester l'accès en écriture au répertoire repository
-- name: Tester l'accès en écriture au répertoire repository
+- name: (validate) Tester l'accès en écriture au répertoire repository
   copy:
     content: "Test d'écriture pour le rapport CMDB - {{ ansible_date_time.iso8601 }}"
     dest: "{{ cmdb_repository.directory }}/reports/write_test.txt"
@@ -181,7 +181,7 @@
     - write_test
 
 # Supprimer le fichier de test
-- name: Supprimer le fichier de test
+- name: (validate) Supprimer le fichier de test
   file:
     path: "{{ cmdb_repository.directory }}/reports/write_test.txt"
     state: absent
@@ -195,7 +195,7 @@
     - write_test
 
 # Afficher un message d'erreur si l'accès en écriture échoue
-- name: Afficher un message d'erreur si l'accès en écriture échoue
+- name: (validate) Afficher un message d'erreur si l'accès en écriture échoue
   debug:
     msg: >-
       ERREUR: Impossible d'écrire dans le répertoire repository 
@@ -208,7 +208,7 @@
     - write_test
 
 # Échec si le répertoire repository n'est pas accessible et si le mode est manager
-- name: Échec si le répertoire repository n'est pas accessible (mode manager)
+- name: (validate) Échec si le répertoire repository n'est pas accessible (mode manager)
   fail:
     msg: >-
       Impossible d'accéder au répertoire repository '{{ cmdb_repository.directory }}/reports' 
@@ -223,7 +223,7 @@
     - repository
 
 # Utiliser le répertoire de secours si le répertoire principal n'est pas accessible
-- name: Utiliser le répertoire de secours si le répertoire principal n'est pas accessible
+- name: (validate) Utiliser le répertoire de secours si le répertoire principal n'est pas accessible
   set_fact:
     cmdb_repository_actual_dir: "{{ cmdb_repository.fallback_directory }}"
   when: 
@@ -234,7 +234,7 @@
     - repository
 
 # Définir le répertoire principal si accessible
-- name: Définir le répertoire principal si accessible
+- name: (validate) Définir le répertoire principal si accessible
   set_fact:
     cmdb_repository_actual_dir: "{{ cmdb_repository.directory }}"
   when: 
@@ -244,7 +244,7 @@
     - repository
 
 # Si envoi par email activé, vérifier la configuration
-- name: Vérifier la configuration email
+- name: (validate) Vérifier la configuration email
   assert:
     that:
       - cmdb_email.smtp.host != ""

@@ -2,13 +2,13 @@
 # tasks file for roles/cmdb_report
 
 # Détermination du serveur repository (AVANT la validation)
-- name: Déterminer le mode de repository
+- name: (main) Déterminer le mode de repository
   set_fact:
     cmdb_repository_mode: "{{ cmdb_repository.mode | default('local') }}"
   tags:
     - always
 
-- name: Déterminer le serveur manager
+- name: (main) Déterminer le serveur manager
   set_fact:
     cmdb_manager_host: >-
       {% if cmdb_repository_mode == 'manager' and cmdb_repository.manager_group is defined %}
@@ -23,7 +23,7 @@
   tags:
     - always
 
-- name: Afficher les informations du repository
+- name: (main) Afficher les informations du repository
   debug:
     msg: 
       - "Mode repository: {{ cmdb_repository_mode }}"
@@ -34,21 +34,21 @@
     - debug
 
 # Validation des prérequis (APRÈS la définition des variables critiques)
-- name: Inclusion des tâches de validation
+- name: (main) Inclusion des tâches de validation
   include_tasks: validate.yml
   tags:
     - always
     - validate
 
 # Collecte et traitement des données JSON
-- name: Inclusion des tâches de collecte de données
+- name: (main) Inclusion des tâches de collecte de données
   include_tasks: collect_data.yml
   tags:
     - always
     - collect
 
 # Vérifier si des données ont été collectées
-- name: Vérifier si des données ont été collectées
+- name: (main) Vérifier si des données ont été collectées
   debug:
     msg: >-
       {% if cmdb_data is defined and cmdb_data | length > 0 %}
@@ -61,7 +61,7 @@
     - check
 
 # Génération du rapport Excel
-- name: Inclusion des tâches de génération du rapport Excel
+- name: (main) Inclusion des tâches de génération du rapport Excel
   include_tasks: generate_excel.yml
   when: cmdb_data is defined and cmdb_data | length > 0
   tags:
@@ -69,14 +69,14 @@
     - generate
     - excel
 
-- name: Inclusion des tâches de débogage
+- name: (main) Inclusion des tâches de débogage
   include_tasks: debug_tasks.yml
   tags:
     - never
     - debug
 
 # Envoi par email
-- name: Inclusion des tâches d'envoi par email
+- name: (main) Inclusion des tâches d'envoi par email
   include_tasks: send_email.yml
   when: 
     - cmdb_email.enabled | bool
@@ -87,7 +87,7 @@
     - send
 
 # Copier le rapport Excel vers le serveur repository si le mode est manager
-- name: Copier le rapport Excel vers le serveur repository
+- name: (main) Copier le rapport Excel vers le serveur repository
   copy:
     src: "{{ cmdb_report_excel_path }}"
     dest: "{{ cmdb_repository_actual_dir | default(cmdb_repository.directory) }}/reports/"
@@ -103,7 +103,7 @@
     - copy
 
 # Afficher le résultat de la copie
-- name: Afficher le résultat de la copie
+- name: (main) Afficher le résultat de la copie
   debug:
     msg: >-
       {% if copy_result is defined and copy_result is success %}
@@ -120,7 +120,7 @@
     - copy
 
 # Nettoyage
-- name: Nettoyer les fichiers temporaires
+- name: (main) Nettoyer les fichiers temporaires
   file:
     path: "{{ cmdb_report.temp_dir }}"
     state: absent
@@ -135,7 +135,7 @@
     - cleanup
 
 # Résumé
-- name: Résumé de l'exécution
+- name: (main) Résumé de l'exécution
   debug:
     msg: >-
       Rapport CMDB généré avec succès!

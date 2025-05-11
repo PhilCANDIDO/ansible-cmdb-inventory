@@ -2,7 +2,7 @@
 # tasks/generate_excel.yml - Génération du rapport Excel
 
 # Création du répertoire pour l'exécution du script Python
-- name: Créer le répertoire pour l'exécution du script
+- name: (generate_excel) Créer le répertoire pour l'exécution du script
   file:
     path: "{{ cmdb_report.temp_dir }}/python"
     state: directory
@@ -14,7 +14,7 @@
     - setup
 
 # Créer la configuration pour le script Python
-- name: Créer la configuration pour la génération du rapport Excel
+- name: (generate_excel) Créer la configuration pour la génération du rapport Excel
   template:
     src: report_config.j2
     dest: "{{ cmdb_report.temp_dir }}/report_config.json"
@@ -25,7 +25,7 @@
     - config
 
 # Créer un environnement virtuel Python pour les dépendances
-- name: Créer un environnement virtuel Python
+- name: (generate_excel) Créer un environnement virtuel Python
   command:
     cmd: "python3 -m venv {{ cmdb_report.temp_dir }}/venv"
     creates: "{{ cmdb_report.temp_dir }}/venv/bin/python"
@@ -36,7 +36,7 @@
     - venv
 
 # Installer les dépendances Python requises dans l'environnement virtuel
-- name: Installer les dépendances Python requises dans l'environnement virtuel
+- name: (generate_excel) Installer les dépendances Python requises dans l'environnement virtuel
   pip:
     name:
       - openpyxl>=3.0.0
@@ -50,7 +50,7 @@
     - dependencies
 
 # Copier le script Python depuis les files du rôle
-- name: Copier le script Python pour la génération du rapport Excel
+- name: (generate_excel) Copier le script Python pour la génération du rapport Excel
   copy:
     src: generate_excel.py
     dest: "{{ cmdb_report.temp_dir }}/generate_excel.py"
@@ -62,7 +62,7 @@
     - script
 
 # Exécuter le script Python pour générer le rapport Excel en utilisant l'environnement virtuel
-- name: Générer le rapport Excel
+- name: (generate_excel) Générer le rapport Excel
   command:
     cmd: "{{ cmdb_report.temp_dir }}/venv/bin/python {{ cmdb_report.temp_dir }}/generate_excel.py {{ cmdb_report.temp_dir }}/report_config.json"
     chdir: "{{ cmdb_report.temp_dir }}"
@@ -76,7 +76,7 @@
     - execute
 
 # Afficher le résultat de la génération
-- name: Afficher le résultat de la génération du rapport Excel
+- name: (generate_excel) Afficher le résultat de la génération du rapport Excel
   debug:
     msg: "{{ excel_generation.stdout_lines }}"
   when: excel_generation.stdout_lines is defined and excel_generation.stdout_lines | length > 0
@@ -85,7 +85,7 @@
     - debug
 
 # Enregistrer le chemin du fichier Excel pour l'envoi ultérieur par email
-- name: Enregistrer le chemin du fichier Excel
+- name: (generate_excel) Enregistrer le chemin du fichier Excel
   set_fact:
     cmdb_report_excel_path: "{{ cmdb_report.temp_dir }}/{{ cmdb_report.filename }}"
   tags:

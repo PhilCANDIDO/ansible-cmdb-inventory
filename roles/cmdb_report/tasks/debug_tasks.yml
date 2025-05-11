@@ -1,7 +1,7 @@
 ---
 # tasks/debug_tasks.yml - Tâches de débogage conditionnelles
 
-- name: Informations de débogage sur la configuration d'email
+- name: (debug_tasks) Informations de débogage sur la configuration d'email
   debug:
     msg:
       - "=== Configuration SMTP utilisée ==="
