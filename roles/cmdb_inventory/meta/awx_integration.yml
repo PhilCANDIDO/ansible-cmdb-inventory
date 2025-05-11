@@ -1,0 +1,50 @@
+---
+# Métadonnées AWX/Tower pour le rôle cmdb_inventory
+# Ce fichier définit les paramètres recommandés pour l'intégration avec AWX/Tower
+
+# Configuration recommandée pour le modèle de tâche
+awx_task_template:
+  # Paramètres de concurrence 
+  forks: 100
+  
+  # Paramètres de verbosité
+  verbosity: 1
+  
+  # Paramètres de timeout
+  timeout: 3600  # 1 heure
+  
+  # Paramètres d'inventaire
+  inventory_mode: "smart"  # Utiliser l'inventaire incrémental
+  
+  # Variables supplémentaires recommandées
+  extra_vars:
+    ansible_ssh_pipelining: true
+    # Configuration du repository CMDB
+    cmdb_repository:
+      mode: "manager"
+      manager_group: "cmdb_repository"
+      directory: "/opt/cmdb/inventory"
+    # Configuration des performances
+    cmdb_performance:
+      incremental_enabled: true
+      full_inventory_days: [0]  # Inventaire complet le dimanche
+      async_tasks: true
+      async_timeout: 300
+
+# Dépendances Python requises
+# Ces dépendances doivent être installées dans l'environnement Python d'AWX/Tower
+python_dependencies:
+  - jmespath>=0.10.0
+  - netaddr>=0.8.0
+  - packaging>=20.0
+
+# Limites d'utilisation des ressources
+resource_limits:
+  min_memory_mb: 2048
+  recommended_memory_mb: 4096
+  max_hosts_per_fork: 60
+
+# Versions d'AWX/Tower compatibles
+compatible_awx_versions:
+  - ">=21.0.0"
+  - "<=25.0.0"
